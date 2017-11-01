@@ -1,0 +1,36 @@
+input{
+    margin: 0;
+}
+
+input[type="text"]{
+    font-family: "Muli", sans-serif;
+    font-size: 20px;
+    border: 0;
+    padding: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #fff;
+    background-color: rgba(0,0,0,0.2);
+    outline: none;
+}
+
+input::placeholder{
+    color: rgba(255,255,255, 0.8)
+}
+
+.btn{
+    border: 0;
+    background-color: transparent;
+    padding: 15px 25px;
+    font-size: 19px;
+    font-family: "Muli", sans-serif;
+    text-transform: uppercase;
+    background-color: transparent;
+    color: #7883ff;
+    outline: none;
+    letter-spacing: 1px;
+    cursor:pointer;
+    transition: 0.3s ease-out;
+    color: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.8)
+}

@@ -1,0 +1,70 @@
+@import url('https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
+
+:host{
+    display:block;
+    font-family: "Muli", sans-serif;
+    text-transform: uppercase;
+    font-size: 20px;
+    width: 350px;
+}
+
+.layout-container{
+    display:flex;
+    width: 100%;
+}
+
+.editable.layout-container{
+    flex-direction: column;
+}
+.input-layout-wrapper{
+    display:flex;
+}
+.editable .input-layout-wrapper{
+    flex: 1;
+}
+.name-layout-wrapper{
+    display:flex;
+    flex:1;
+}
+
+
+.name{
+    flex: 1;
+    padding: 20px;
+    cursor: pointer;
+    text-align: center;
+    overflow:hidden;
+}
+
+.right-bar{
+    margin-left: auto;
+    display: flex;
+    flex: 1;
+}
+
+.editable .right-bar .btn{
+    flex:1;
+}
+
+.editable .right-bar{
+    margin-left:0;
+}
+
+.btn.ticker{
+    font-size: 25px;
+}
+
+.btn.edit{
+    font-size: 15px;
+    padding-left: 30px;
+    color: rgba(255,255,255,0.7)
+}
+
+.btn:hover{
+    background-color: rgba(245, 246, 245, 0.2);
+}
+
+
+.btn:active{
+    background-color: rgba(255, 255, 255, 0.2);
+}

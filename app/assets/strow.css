@@ -1,0 +1,16 @@
+f-card{
+    position:absolute;
+    top: 30%;
+    left: calc(50% - 175px);
+}
+
+s-create-habit{
+    position:absolute;
+    width:300px;
+    top: 30%;
+    left: calc(50% - 150px);
+}
+
+:host{
+    
+}

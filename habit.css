@@ -1,0 +1,31 @@
+:host{
+    display: block;
+    width: 100%;
+}
+.container{
+    align-items: center;
+    padding: 10px 20px; 
+    box-shadow: 0px 1px 3px 0px rgba(0, 0, 0, 0.45);
+    border-radius: 20px;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+s-checkbox{
+    margin-left: auto;
+    font-size: 20px;
+}
+header{
+    justify-content: center;
+    display: flex;
+}
+.name{
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.selected{}
+
+.drawer{ background-color: #ccc;}

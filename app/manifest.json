@@ -1,0 +1,18 @@
+{
+  "description": "A Visual Habit Tracker",
+  "short_name": "Strow.",
+  "name": "Strow",
+  "gcm_sender_id": "103953800507",
+  "display": "standalone",
+  "background_color": "#1b1b35",
+  "theme_color": "#1b1b35",
+  "start_url": "/",
+  "orientation": "portrait",
+  "icons":[
+    {
+      "src": "/assets/strow-icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ]
+}

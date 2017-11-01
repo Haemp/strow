@@ -1,0 +1,28 @@
+{
+  "name": "strive",
+  "version": "1.0.0",
+  "description": "Habit Tracking",
+  "main": "Strive.js",
+  "scripts": {
+    "watch":"webpack",
+    "watch-dev": "webpack --config=webpack-dev.config.js",
+    "test": "karma start",
+    "dev": "http-server . -p 1337",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:hosting": "firebase deploy --only hosting"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "firebase": "^4.6.0",
+    "firebaseui": "^2.4.1",
+    "howler": "^2.0.5",
+    "matter-attractors": "^0.1.6",
+    "matter-js": "^0.13.0",
+    "simply.js": "Haemp/simply.js"
+  },
+  "devDependencies": {
+    "webpack": "^3.8.1"
+  }
+}

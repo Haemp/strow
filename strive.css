@@ -1,0 +1,39 @@
+s-habit-list{
+    /* margin: 0 20px; */
+}
+
+h1{
+    text-align: center;
+    font-size: 85px;
+    font-family: "Roboto Slab", sans-serif;
+    color: #579a7c;
+    font-weight: bold;
+}
+
+s-habit-list{
+    /* margin: 0 auto; */
+    grid-area: main;
+    overflow-y: auto;
+    padding: 0 1px;
+}
+
+s-habit-create{
+    grid-area: footer;
+}
+.inner-wrapper{
+    height: 100%;
+    display:grid;
+    grid-template-columns: auto;
+    grid-template-rows: auto 50px;
+    grid-template-areas: 
+        "main"
+        "footer";
+}
+s-basement{
+    width: 40%
+}
+s-basement-toggle{
+    position:absolute;
+    bottom: 10px;
+    left: -16px;
+}
