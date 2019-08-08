@@ -7,7 +7,7 @@
     "watch":"webpack",
     "watch-dev": "webpack --config=webpack-dev.config.js",
     "test": "karma start",
-    "dev": "http-server . -p 1337",
+    "dev": "http-server ./app -p 1337",
     "deploy": "firebase deploy",
     "deploy:functions": "firebase deploy --only functions",
     "deploy:hosting": "firebase deploy --only hosting"

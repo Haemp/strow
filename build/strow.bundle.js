@@ -65,39 +65,9 @@
 /************************************************************************/
 /******/ ([
 /* 0 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* unused harmony export NameOrCtorDef */
-/**
- * Copyright 2016 The Incremental DOM Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS-IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-/** @typedef {string|!Function} */
-let NameOrCtorDef;
-
-
-
-
-
-/***/ }),
-/* 1 */
 /***/ (function(module, exports, __webpack_require__) {
 
-const iDOM = __webpack_require__(15);
+const iDOM = __webpack_require__(14);
 
 // enforce { prop } formated attribute values
 // to set the property instead of the attribute
@@ -257,11 +227,10 @@ function generateTemplateRecusive(curNode){
  */
 function triggerCompiled(){
     return `
-        if(curNode.$shouldWaitForCompile && curNode.$compiled != true){
+        if(curNode.$compiled != true){
             if(curNode.compiledCallback)
                 curNode.compiledCallback();
                 
-            curNode.$shouldWaitForCompile = false;
             curNode.$compiled = true;
         }
     `;
@@ -308,7 +277,6 @@ function closeOpenTag() {
     // if separate
     return `
     curNode = iDOM.elementOpenEnd();
-    curNode.$shouldWaitForCompile = true;
 `;
 }
 
@@ -320,6 +288,9 @@ function applyEach(each, curNode){
     // stamping it - otherwise this will lead to an infinite loop
     curNode.removeAttribute('each');
 
+    // TODO: There is a bug where where events set on an element
+    // inside an each statement will have the data object set as
+    // "this". 
     tmpl += wrapAndThrowError(`
         // generate repeating element
         ${collection}.forEach((${item}) => {
@@ -622,8 +593,12 @@ class Component extends HTMLElement{
             return render(this, this.$shadyDom ? this : this.shadow);
         }
 
+        // wraps the given property in a setter to render
+        // on update
         if(this.props){
             this.props.forEach((prop) => {
+
+                // TODO: throw error if the property already exists
                 Object.defineProperty(this.prototype, prop, {
                     set: function (value) {
                         this['_'+prop] = value;
@@ -643,11 +618,21 @@ class Component extends HTMLElement{
 
         // connectedCallback triggers rendering routine
         this.prototype.connectedCallback = function(){
-            this.render();
 
-            if(!this.$shouldWaitForCompile){
+            this.render();
+            // In the case of this method being called inside of a simply template
+            // we want to wait till the compiled handler to trigger this logic
+
+            // BUT in the case of the simply component being added directly to
+            // the the DOM and not via a simply template we want to trigger it directly
+
+            // When an element is created via iDOM - it puts this flag on the node.
+            // If so - we wait to trigger the connectedCallback till all compilation
+            // is done.
+            if(!this.$iDOMCreated){
                 if(userDefinedCallback)
                     userDefinedCallback.call(this);
+
             }
         }
 
@@ -684,7 +669,6 @@ class Component extends HTMLElement{
     }
 }
 
-
 module.exports = {
     settings,
     define: function(tagName, classDefinition){
@@ -700,313 +684,37 @@ module.exports = {
 
 
 /***/ }),
+/* 1 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* unused harmony export NameOrCtorDef */
+/**
+ * Copyright 2016 The Incremental DOM Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+/** @typedef {string|!Function} */
+let NameOrCtorDef;
+
+
+
+
+
+/***/ }),
 /* 2 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return getData; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return initData; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return importNode; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(4);
-/**
- * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS-IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-
-
-
-/**
- * Keeps track of information needed to perform diffs for a given DOM node.
- * @param {NameOrCtorDef} nameOrCtor
- * @param {?string=} key
- * @param {*=} typeId
- * @constructor
- */
-function NodeData(nameOrCtor, key, typeId) {
-  /**
-   * An array of attribute name/value pairs, used for quickly diffing the
-   * incomming attributes to see if the DOM node's attributes need to be
-   * updated.
-   * @const {Array<*>}
-   */
-  this.attrsArr = [];
-
-  /**
-   * Whether or not the statics have been applied for the node yet.
-   * {boolean}
-   */
-  this.staticsApplied = false;
-
-  /**
-   * The key used to identify this node, used to preserve DOM nodes when they
-   * move within their parent.
-   * @type {?string|undefined}
-   */
-  this.key = key;
-
-  /**
-   * Keeps track of children within this node by their key.
-   * {!Object<string, !Element>}
-   */
-  this.keyMap = Object(__WEBPACK_IMPORTED_MODULE_1__util_js__["a" /* createMap */])();
-
-  /**
-   * Whether or the associated node is, or contains, a focused Element.
-   * @type {boolean}
-   */
-  this.focused = false;
-
-  /**
-   * The nodeName or contructor for the Node.
-   * @const {NameOrCtorDef}
-   */
-  this.nameOrCtor = nameOrCtor;
-
-  /**
-   * @type {?string}
-   */
-  this.text = null;
-
-  /**
-   * @const
-   */
-  this.typeId = typeId;
-}
-
-
-/**
- * Initializes a NodeData object for a Node.
- *
- * @param {Node} node The node to initialize data for.
- * @param {NameOrCtorDef} nameOrCtor The nodeName or constructor for the Node.
- * @param {?string=} key The key that identifies the node.
- * @param {*=} typeId The type identifier for the Node.
- * @return {!NodeData} The newly initialized data object
- */
-const initData = function(node, nameOrCtor, key, typeId) {
-  const data = new NodeData(nameOrCtor, key, typeId);
-  node['__incrementalDOMData'] = data;
-  return data;
-};
-
-
-/**
- * Retrieves the NodeData object for a Node, creating it if necessary.
- *
- * @param {?Node} node The Node to retrieve the data for.
- * @return {!NodeData} The NodeData for this Node.
- */
-const getData = function(node) {
-  importNode(node);
-  return node['__incrementalDOMData'];
-};
-
-
-/**
- * Imports node and its subtree, initializing caches.
- *
- * @param {?Node} node The Node to import.
- */
-const importNode = function(node) {
-  if (node['__incrementalDOMData']) {
-    return;
-  }
-
-  const isElement = node.nodeType === 1;
-  const nodeName = isElement ? node.localName : node.nodeName;
-  const key = isElement ? node.getAttribute('key') : null;
-  const typeId = node['typeId'];
-  const data = initData(node, nodeName, key, typeId);
-
-  if (key) {
-    getData(node.parentNode).keyMap[key] = node;
-  }
-
-  if (isElement) {
-    const attributes = node.attributes;
-    const attrsArr = data.attrsArr;
-
-    for (let i = 0; i < attributes.length; i += 1) {
-      const attr = attributes[i];
-      const name = attr.name;
-      const value = attr.value;
-
-      attrsArr.push(name);
-      attrsArr.push(value);
-    }
-  }
-
-  for (let child = node.firstChild; child; child = child.nextSibling) {
-    importNode(child);
-  }
-};
-
-
-/** */
-
-
-
-/***/ }),
-/* 3 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-const typeToColor = new Map();
-typeToColor.set(undefined, 'gray');
-typeToColor.set(1, 'orange');
-typeToColor.set(2, 'blue');
-typeToColor.set(3, 'pink');
-typeToColor.set(4, 'yellow');
-typeToColor.set(5, 'green');
-typeToColor.set(6, 'teal');
-typeToColor.set(7, 'purple');
-typeToColor.set(8, 'red');
-
-const colorToHex = new Map();
-
-colorToHex.set('gray', '#d2d2d2');
-colorToHex.set('orange', '#f6bf49');
-colorToHex.set('blue', '#6d84e5')
-colorToHex.set('pink', '#e285b7')
-colorToHex.set('yellow', '#f8e89d')
-colorToHex.set('green', '#90ce74')
-colorToHex.set('teal', '#82c7d8')
-colorToHex.set('purple', '#a571d4')
-colorToHex.set('red', '#ef8886')
-
-
-class HabitHelper{
-    static getColorNameForType(type){
-        return typeToColor.get(type);
-    }
-
-    static getColorHex(color){
-        return colorToHex.get(color)
-    }
-}
-/* harmony export (immutable) */ __webpack_exports__["a"] = HabitHelper;
-
-
-/***/ }),
-/* 4 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return createMap; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return has; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return truncateArray; });
-/**
- * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS-IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-/**
- * A cached reference to the hasOwnProperty function.
- */
-const hasOwnProperty = Object.prototype.hasOwnProperty;
-
-
-/**
- * A constructor function that will create blank objects.
- * @constructor
- */
-function Blank() {}
-
-Blank.prototype = Object.create(null);
-
-
-/**
- * Used to prevent property collisions between our "map" and its prototype.
- * @param {!Object<string, *>} map The map to check.
- * @param {string} property The property to check.
- * @return {boolean} Whether map has property.
- */
-const has = function(map, property) {
-  return hasOwnProperty.call(map, property);
-};
-
-
-/**
- * Creates an map object without a prototype.
- * @return {!Object}
- */
-const createMap = function() {
-  return new Blank();
-};
-
-
-/**
- * Truncates an array, removing items up until length.
- * @param {!Array<*>} arr The array to truncate.
- * @param {number} length The new length of the array.
- */
-const truncateArray = function(arr, length) {
-  while (arr.length > length) {
-    arr.pop();
-  }
-};
-
-
-/** */
-
-
-
-
-/***/ }),
-/* 5 */
-/***/ (function(module, exports) {
-
-var g;
-
-// This works in non-strict mode
-g = (function() {
-	return this;
-})();
-
-try {
-	// This works if eval is allowed (see CSP)
-	g = g || Function("return this")() || (1,eval)("this");
-} catch(e) {
-	// This works if the window reference is available
-	if(typeof window === "object")
-		g = window;
-}
-
-// g can still be undefined, but nothing to do about it...
-// We return undefined, instead of nothing here, so it's
-// easier to handle this case. if(!global) { ...}
-
-module.exports = g;
-
-
-/***/ }),
-/* 6 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {var require;var require;(function(f){if(true){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Matter = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return require(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
@@ -11405,7 +11113,313 @@ var Vector = require('../geometry/Vector');
 
 },{"../body/Composite":2,"../core/Common":14,"../core/Events":16,"../geometry/Bounds":26,"../geometry/Vector":28}]},{},[30])(30)
 });
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ }),
+/* 3 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return getData; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return initData; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return importNode; });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(5);
+/**
+ * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+
+
+
+/**
+ * Keeps track of information needed to perform diffs for a given DOM node.
+ * @param {NameOrCtorDef} nameOrCtor
+ * @param {?string=} key
+ * @param {*=} typeId
+ * @constructor
+ */
+function NodeData(nameOrCtor, key, typeId) {
+  /**
+   * An array of attribute name/value pairs, used for quickly diffing the
+   * incomming attributes to see if the DOM node's attributes need to be
+   * updated.
+   * @const {Array<*>}
+   */
+  this.attrsArr = [];
+
+  /**
+   * Whether or not the statics have been applied for the node yet.
+   * {boolean}
+   */
+  this.staticsApplied = false;
+
+  /**
+   * The key used to identify this node, used to preserve DOM nodes when they
+   * move within their parent.
+   * @type {?string|undefined}
+   */
+  this.key = key;
+
+  /**
+   * Keeps track of children within this node by their key.
+   * {!Object<string, !Element>}
+   */
+  this.keyMap = Object(__WEBPACK_IMPORTED_MODULE_1__util_js__["a" /* createMap */])();
+
+  /**
+   * Whether or the associated node is, or contains, a focused Element.
+   * @type {boolean}
+   */
+  this.focused = false;
+
+  /**
+   * The nodeName or contructor for the Node.
+   * @const {NameOrCtorDef}
+   */
+  this.nameOrCtor = nameOrCtor;
+
+  /**
+   * @type {?string}
+   */
+  this.text = null;
+
+  /**
+   * @const
+   */
+  this.typeId = typeId;
+}
+
+
+/**
+ * Initializes a NodeData object for a Node.
+ *
+ * @param {Node} node The node to initialize data for.
+ * @param {NameOrCtorDef} nameOrCtor The nodeName or constructor for the Node.
+ * @param {?string=} key The key that identifies the node.
+ * @param {*=} typeId The type identifier for the Node.
+ * @return {!NodeData} The newly initialized data object
+ */
+const initData = function(node, nameOrCtor, key, typeId) {
+  const data = new NodeData(nameOrCtor, key, typeId);
+  node['__incrementalDOMData'] = data;
+  return data;
+};
+
+
+/**
+ * Retrieves the NodeData object for a Node, creating it if necessary.
+ *
+ * @param {?Node} node The Node to retrieve the data for.
+ * @return {!NodeData} The NodeData for this Node.
+ */
+const getData = function(node) {
+  importNode(node);
+  return node['__incrementalDOMData'];
+};
+
+
+/**
+ * Imports node and its subtree, initializing caches.
+ *
+ * @param {?Node} node The Node to import.
+ */
+const importNode = function(node) {
+  if (node['__incrementalDOMData']) {
+    return;
+  }
+
+  const isElement = node.nodeType === 1;
+  const nodeName = isElement ? node.localName : node.nodeName;
+  const key = isElement ? node.getAttribute('key') : null;
+  const typeId = node['typeId'];
+  const data = initData(node, nodeName, key, typeId);
+
+  if (key) {
+    getData(node.parentNode).keyMap[key] = node;
+  }
+
+  if (isElement) {
+    const attributes = node.attributes;
+    const attrsArr = data.attrsArr;
+
+    for (let i = 0; i < attributes.length; i += 1) {
+      const attr = attributes[i];
+      const name = attr.name;
+      const value = attr.value;
+
+      attrsArr.push(name);
+      attrsArr.push(value);
+    }
+  }
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    importNode(child);
+  }
+};
+
+
+/** */
+
+
+
+/***/ }),
+/* 4 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+const typeToColor = new Map();
+typeToColor.set(undefined, 'gray');
+typeToColor.set(1, 'orange');
+typeToColor.set(2, 'blue');
+typeToColor.set(3, 'pink');
+typeToColor.set(4, 'yellow');
+typeToColor.set(5, 'green');
+typeToColor.set(6, 'teal');
+typeToColor.set(7, 'purple');
+typeToColor.set(8, 'red');
+
+const colorToHex = new Map();
+
+colorToHex.set('gray', '#d2d2d2');
+colorToHex.set('orange', '#f6bf49');
+colorToHex.set('blue', '#6d84e5')
+colorToHex.set('pink', '#e285b7')
+colorToHex.set('yellow', '#f8e89d')
+colorToHex.set('green', '#90ce74')
+colorToHex.set('teal', '#82c7d8')
+colorToHex.set('purple', '#a571d4')
+colorToHex.set('red', '#ef8886')
+
+
+class HabitHelper{
+    static getColorNameForType(type){
+        return typeToColor.get(type);
+    }
+
+    static getColorHex(color){
+        return colorToHex.get(color)
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = HabitHelper;
+
+
+/***/ }),
+/* 5 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return createMap; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return has; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return truncateArray; });
+/**
+ * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+/**
+ * A cached reference to the hasOwnProperty function.
+ */
+const hasOwnProperty = Object.prototype.hasOwnProperty;
+
+
+/**
+ * A constructor function that will create blank objects.
+ * @constructor
+ */
+function Blank() {}
+
+Blank.prototype = Object.create(null);
+
+
+/**
+ * Used to prevent property collisions between our "map" and its prototype.
+ * @param {!Object<string, *>} map The map to check.
+ * @param {string} property The property to check.
+ * @return {boolean} Whether map has property.
+ */
+const has = function(map, property) {
+  return hasOwnProperty.call(map, property);
+};
+
+
+/**
+ * Creates an map object without a prototype.
+ * @return {!Object}
+ */
+const createMap = function() {
+  return new Blank();
+};
+
+
+/**
+ * Truncates an array, removing items up until length.
+ * @param {!Array<*>} arr The array to truncate.
+ * @param {number} length The new length of the array.
+ */
+const truncateArray = function(arr, length) {
+  while (arr.length > length) {
+    arr.pop();
+  }
+};
+
+
+/** */
+
+
+
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports) {
+
+var g;
+
+// This works in non-strict mode
+g = (function() {
+	return this;
+})();
+
+try {
+	// This works if eval is allowed (see CSP)
+	g = g || Function("return this")() || (1,eval)("this");
+} catch(e) {
+	// This works if the window reference is available
+	if(typeof window === "object")
+		g = window;
+}
+
+// g can still be undefined, but nothing to do about it...
+// We return undefined, instead of nothing here, so it's
+// easier to handle this case. if(!global) { ...}
+
+module.exports = g;
+
 
 /***/ }),
 /* 7 */
@@ -11421,11 +11435,11 @@ var Vector = require('../geometry/Vector');
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return currentPointer; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "g", function() { return skip; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "h", function() { return skipNode; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__nodes_js__ = __webpack_require__(16);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__nodes_js__ = __webpack_require__(15);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__node_data_js__ = __webpack_require__(3);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__assertions_js__ = __webpack_require__(8);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__dom_util_js__ = __webpack_require__(17);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__dom_util_js__ = __webpack_require__(16);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__global_js__ = __webpack_require__(9);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
@@ -11655,6 +11669,11 @@ const alignWithDOM = function(nameOrCtor, key, typeId) {
     }
   }
 
+  // Mark element. This is to be able to determine whether
+  // this element is fully initiated on creation or if there
+  // are still changes coming 
+  node.$iDOMCreated = true;
+
   // Re-order the node into the right position, preserving focus if either
   // node or currentNode are focused by making sure that they are not detached
   // from the DOM.
@@ -11849,7 +11868,7 @@ const skipNode = nextNode;
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "i", function() { return assertPatchOuterHasParentNode; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "k", function() { return setInAttributes; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "l", function() { return setInSkip; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
  *
@@ -12100,7 +12119,7 @@ const global = typeof self !== 'undefined' ? self :
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return applyAttr; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return attributes; });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__symbols_js__ = __webpack_require__(11);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(4);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(5);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
  *
@@ -12293,7 +12312,7 @@ const symbols = {
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
 
 
@@ -12325,6 +12344,7 @@ class Card extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js
     close(){
         return new Promise((res) => {
             document.removeEventListener('click', this._dismissHandler);
+            document.removeEventListener('touchend', this._dismissHandler);
             const animation = this.animate([
                 {
                     transform: 'scale3d(1,1,1) translateX(0) translateY(0)',
@@ -12394,10 +12414,10 @@ class Card extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js
 
         setTimeout(_ => {
             preventAutoDismiss = false;
-        }, 1000)
+        }, 2000)
         
         this._dismissHandler = function(event){
-            console.log(event)
+
             if(preventAutoDismiss) return;
             
             if(!event.path.includes(self)){
@@ -12446,34 +12466,29 @@ Card.define('f-card');
 
 /***/ }),
 /* 13 */
-/***/ (function(module, exports, __webpack_require__) {
-
-__webpack_require__(14);
-module.exports = __webpack_require__(30);
-
-
-/***/ }),
-/* 14 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js__ = __webpack_require__(19);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js__ = __webpack_require__(18);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__habit_tank_BallTank_js__ = __webpack_require__(20);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__habit_ui_HabitDetails_js__ = __webpack_require__(25);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__habit_tank_BallTank_js__ = __webpack_require__(19);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__habit_ui_HabitDetails_js__ = __webpack_require__(27);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__ui_Card_js__ = __webpack_require__(12);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__habit_ui_CreateHabit_js__ = __webpack_require__(26);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__ = __webpack_require__(27);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__habit_ui_CreateHabit_js__ = __webpack_require__(28);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__ = __webpack_require__(29);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__ = __webpack_require__(28);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7__onboarding_OnBoarding_js__ = __webpack_require__(30);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__ = __webpack_require__(32);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__ = __webpack_require__(4);
 
 
 
 // load in webcomponents
+
+
 
 
 
@@ -12490,22 +12505,23 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
                 @import url('./assets/common-styles.css');
                 @import url('./assets/strow.css');
             </style>
-            
-                <s-loading-screen #loadingScreen></s-loading-screen>
-                <s-create-habit #createHabit 
-                                (created)="this.onCreateHabit($evt.detail)" 
-                                (cancel)="this.onCancelCreate($evt)"></s-create-habit>
-                <f-card #selectedHabit 
-                        hidden 
-                        simple 
-                        class="{{ this.HabitHelper.getColorNameForType(this.selectedHabit.type) }}">
-                    <s-habit-details slot="content" 
-                                    {habit}="{this.selectedHabit}" 
-                                    (updated)="this.onHabitUpdated($evt.detail)"
-                                    (removed)="this.onHabitRemoved($evt.detail)"
-                                    (ticked)="this.onHabitTicked($evt.detail)">
-                    </s-habit-details>
-                </f-card>
+            <s-onboarding #onboarding 
+                          (complete)="this.onOnboardingComplete()"></s-onboarding>
+            <s-loading-screen #loadingScreen></s-loading-screen>
+            <s-create-habit #createHabit 
+                            (created)="this.onCreateHabit($evt.detail)" 
+                            (cancel)="this.onCancelCreate($evt)"></s-create-habit>
+            <f-card #selectedHabit 
+                    hidden 
+                    simple 
+                    class="{{ this.HabitHelper.getColorNameForType(this.selectedHabit.type) }}">
+                <s-habit-details slot="content" 
+                                {habit}="{this.selectedHabit}" 
+                                (updated)="this.onHabitUpdated($evt.detail)"
+                                (removed)="this.onHabitRemoved($evt.detail)"
+                                (ticked)="this.onHabitTicked($evt.detail)">
+                </s-habit-details>
+            </f-card>
             
             <s-ball-tank #ballTank 
                          (habitselected)="this.onHabitSelected($evt.detail)" 
@@ -12515,30 +12531,53 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         `;
     }
 
+
     static get props(){
         return ['habits', 'selectedHabit'];
     }
     
     constructor(){
         super();
+
         this.habits = [];
-        this.HabitHelper = __WEBPACK_IMPORTED_MODULE_8__HabitHelper_js__["a" /* default */];
+
+        this.HabitHelper = __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__["a" /* default */];
         this._loadSounds();
     }
 
     async connectedCallback(){
-        this.HabitModel = __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */];
-        await __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].loadHabits();
 
-        this.$.ballTank.setHabits(__WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].habits);
+        
+        this.HabitModel = __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */];
+        await __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].loadHabits();
+        
+        this.$.ballTank.setHabits(__WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].habits);
         this.$.createHabit.type = undefined;
         setTimeout(_ => {
             this.$.loadingScreen.hide();
         }, 500)
+        
+        // @inspect
+        if(!localStorage.getItem('strive.hasBeenOnboarded')){
+            this._onboardingActive = true;
+            this.$.onboarding.start()
+            this.$.onboarding.setSlide(1)
+        }
+    }
+
+    
+    _resetOnboarding(){
+        localStorage.setItem('strive.hasBeenOnboarded', false);
+    }
+    
+    
+    onOnboardingComplete(){
+        localStorage.setItem('strive.hasBeenOnboarded', true);
     }
 
     onPromptCreate(ball){
         this.$.createHabit.open();
+        
         this._createdBall = ball;
         this._createdSound.play()
     }
@@ -12547,19 +12586,26 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         this._tickedSound.play();
         habit.ticks++;
         habit.activeTicks++;
-        __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */]._save();
+        __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */]._save();
         this.$.ballTank.setTickForHabit(habit);
+
+        if(this._onboardingActive){
+            this.$.onboarding.setSlide(4);
+            this.$.selectedHabit.close();
+        }
     }
+
+
 
     async onHabitRemoved(habit){
         this.$.ballTank.removeHabit(habit)
         this.$.selectedHabit.close();
         this._removedSound.play()
-        await __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].remove(habit);
+        await __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].remove(habit);
     }
 
     onHabitUpdated(habit){
-        __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */]._save();   
+        __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */]._save();   
     }
 
     onCancelCreate(){
@@ -12569,12 +12615,16 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
 
     onCreateHabit(habitName){
         
-        const habit = __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].addHabit(habitName);
+        const habit = __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].addHabit(habitName);
         this.$.ballTank.associateHabitToCreatedBall(habit);
        
         this.render();
         this._createdBall = null;
         this.$.createHabit.close();
+
+        if(this._onboardingActive){
+            this.$.onboarding.setSlide(2);
+        }
     }
 
     onHabitSelected(habit){
@@ -12582,18 +12632,25 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         // we dont select a habit if in the process
         // of adding one
         if(this._createdBall){
-           return; 
+            return; 
         }
         
         this._selectSound.play();
+        
+        
         this.selectedHabit = habit;
         console.log(this.selectedHabit);
         window.selectedHabit = habit;
         if(this.selectedHabit)
             this.$.selectedHabit.open();
+
+        if(this._onboardingActive){
+            this.$.onboarding.setSlide(3);
+        }
     }
 
     async onHabitDeSelected(){
+        
         await this.$.selectedHabit.close();
         this.selectedHabit = null;
     }
@@ -12630,7 +12687,7 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
 Strow.define('s-strow');
 
 /***/ }),
-/* 15 */
+/* 14 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -12645,7 +12702,7 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "currentPointer", function() { return __WEBPACK_IMPORTED_MODULE_0__src_core_js__["c"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "skip", function() { return __WEBPACK_IMPORTED_MODULE_0__src_core_js__["g"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "skipNode", function() { return __WEBPACK_IMPORTED_MODULE_0__src_core_js__["h"]; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__src_virtual_elements_js__ = __webpack_require__(18);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__src_virtual_elements_js__ = __webpack_require__(17);
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "elementVoid", function() { return __WEBPACK_IMPORTED_MODULE_1__src_virtual_elements_js__["f"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "elementOpenStart", function() { return __WEBPACK_IMPORTED_MODULE_1__src_virtual_elements_js__["e"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "elementOpenEnd", function() { return __WEBPACK_IMPORTED_MODULE_1__src_virtual_elements_js__["d"]; });
@@ -12659,7 +12716,7 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "attributes", function() { return __WEBPACK_IMPORTED_MODULE_3__src_attributes_js__["c"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "applyAttr", function() { return __WEBPACK_IMPORTED_MODULE_3__src_attributes_js__["a"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "applyProp", function() { return __WEBPACK_IMPORTED_MODULE_3__src_attributes_js__["b"]; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__src_node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__src_node_data_js__ = __webpack_require__(3);
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "importNode", function() { return __WEBPACK_IMPORTED_MODULE_4__src_node_data_js__["b"]; });
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
@@ -12685,14 +12742,14 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 
 
 /***/ }),
-/* 16 */
+/* 15 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return createElement; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return createText; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_data_js__ = __webpack_require__(3);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
  *
@@ -12779,7 +12836,7 @@ const createText = function(doc) {
 
 
 /***/ }),
-/* 17 */
+/* 16 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -12900,7 +12957,7 @@ const moveBefore = function(parentNode, node, referenceNode) {
 
 
 /***/ }),
-/* 18 */
+/* 17 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -12911,12 +12968,12 @@ const moveBefore = function(parentNode, node, referenceNode) {
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return elementClose; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "g", function() { return text; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return attr; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__core_js__ = __webpack_require__(7);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__attributes_js__ = __webpack_require__(10);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__node_data_js__ = __webpack_require__(3);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__assertions_js__ = __webpack_require__(8);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__util_js__ = __webpack_require__(4);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__util_js__ = __webpack_require__(5);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__global_js__ = __webpack_require__(9);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
@@ -13214,14 +13271,14 @@ const text = function(value, var_args) {
 
 
 /***/ }),
-/* 19 */
+/* 18 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
- *  howler.js v2.0.5
+ *  howler.js v2.1.2
  *  howlerjs.com
  *
- *  (c) 2013-2017, James Simpson of GoldFire Studios
+ *  (c) 2013-2019, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -13252,6 +13309,10 @@ const text = function(value, var_args) {
       // Create a global ID counter.
       self._counter = 1000;
 
+      // Pool of unlocked HTML5 Audio objects.
+      self._html5AudioPool = [];
+      self.html5PoolSize = 10;
+
       // Internal properties.
       self._codecs = {};
       self._howls = [];
@@ -13267,8 +13328,8 @@ const text = function(value, var_args) {
       self.autoSuspend = true;
       self.ctx = null;
 
-      // Set to false to disable the auto iOS enabler.
-      self.mobileAutoEnable = true;
+      // Set to false to disable the auto audio unlocker.
+      self.autoUnlock = true;
 
       // Setup the various state values for global tracking.
       self._setup();
@@ -13300,7 +13361,7 @@ const text = function(value, var_args) {
 
         // When using Web Audio, we just need to adjust the master gain.
         if (self.usingWebAudio) {
-          self.masterGain.gain.value = vol;
+          self.masterGain.gain.setValueAtTime(vol, Howler.ctx.currentTime);
         }
 
         // Loop through and change volume for all HTML5 audio nodes.
@@ -13342,7 +13403,7 @@ const text = function(value, var_args) {
 
       // With Web Audio, we just need to mute the master gain.
       if (self.usingWebAudio) {
-        self.masterGain.gain.value = muted ? 0 : self._volume;
+        self.masterGain.gain.setValueAtTime(muted ? 0 : self._volume, Howler.ctx.currentTime);
       }
 
       // Loop through and mute all HTML5 Audio nodes.
@@ -13403,7 +13464,7 @@ const text = function(value, var_args) {
       var self = this || Howler;
 
       // Keeps track of the suspend/resume state of the AudioContext.
-      self.state = self.ctx ? self.ctx.state || 'running' : 'running';
+      self.state = self.ctx ? self.ctx.state || 'suspended' : 'suspended';
 
       // Automatically begin the 30-second suspend process
       self._autoSuspend();
@@ -13489,22 +13550,21 @@ const text = function(value, var_args) {
     },
 
     /**
-     * Mobile browsers will only allow audio to be played after a user interaction.
+     * Some browsers/devices will only allow audio to be played after a user interaction.
      * Attempt to automatically unlock audio on the first user interaction.
      * Concept from: http://paulbakaus.com/tutorials/html5/web-audio-on-ios/
      * @return {Howler}
      */
-    _enableMobileAudio: function() {
+    _unlockAudio: function() {
       var self = this || Howler;
 
-      // Only run this on mobile devices if audio isn't already eanbled.
-      var isMobile = /iPhone|iPad|iPod|Android|BlackBerry|BB10|Silk|Mobi/i.test(self._navigator && self._navigator.userAgent);
-      var isTouch = !!(('ontouchend' in window) || (self._navigator && self._navigator.maxTouchPoints > 0) || (self._navigator && self._navigator.msMaxTouchPoints > 0));
-      if (self._mobileEnabled || !self.ctx || (!isMobile && !isTouch)) {
+      // Only run this if Web Audio is supported and it hasn't already been unlocked.
+      if (self._audioUnlocked || !self.ctx) {
         return;
       }
 
-      self._mobileEnabled = false;
+      self._audioUnlocked = false;
+      self.autoUnlock = false;
 
       // Some mobile devices/platforms have distortion issues when opening/closing tabs and/or web views.
       // Bugs in the browser (especially Mobile Safari) can cause the sampleRate to change from 44100 to 48000.
@@ -13521,9 +13581,48 @@ const text = function(value, var_args) {
       // Call this method on touch start to create and play a buffer,
       // then check if the audio actually played to determine if
       // audio has now been unlocked on iOS, Android, etc.
-      var unlock = function() {
+      var unlock = function(e) {
+        // Create a pool of unlocked HTML5 Audio objects that can
+        // be used for playing sounds without user interaction. HTML5
+        // Audio objects must be individually unlocked, as opposed
+        // to the WebAudio API which only needs a single activation.
+        // This must occur before WebAudio setup or the source.onended
+        // event will not fire.
+        for (var i=0; i<self.html5PoolSize; i++) {
+          try {
+            var audioNode = new Audio();
+
+            // Mark this Audio object as unlocked to ensure it can get returned
+            // to the unlocked pool when released.
+            audioNode._unlocked = true;
+
+            // Add the audio node to the pool.
+            self._releaseHtml5Audio(audioNode);
+          } catch (e) {
+            self.noAudio = true;
+          }
+        }
+
+        // Loop through any assigned audio nodes and unlock them.
+        for (var i=0; i<self._howls.length; i++) {
+          if (!self._howls[i]._webAudio) {
+            // Get all of the sounds in this Howl group.
+            var ids = self._howls[i]._getSoundIds();
+
+            // Loop through all sounds and unlock the audio nodes.
+            for (var j=0; j<ids.length; j++) {
+              var sound = self._howls[i]._soundById(ids[j]);
+
+              if (sound && sound._node && !sound._node._unlocked) {
+                sound._node._unlocked = true;
+                sound._node.load();
+              }
+            }
+          }
+        }
+
         // Fix Android can not play in suspend state.
-        Howler._autoResume();
+        self._autoResume();
 
         // Create an empty buffer.
         var source = self.ctx.createBufferSource();
@@ -13547,18 +13646,63 @@ const text = function(value, var_args) {
           source.disconnect(0);
 
           // Update the unlocked state and prevent this check from happening again.
-          self._mobileEnabled = true;
-          self.mobileAutoEnable = false;
+          self._audioUnlocked = true;
 
           // Remove the touch start listener.
           document.removeEventListener('touchstart', unlock, true);
           document.removeEventListener('touchend', unlock, true);
+          document.removeEventListener('click', unlock, true);
+
+          // Let all sounds know that audio has been unlocked.
+          for (var i=0; i<self._howls.length; i++) {
+            self._howls[i]._emit('unlock');
+          }
         };
       };
 
       // Setup a touch start listener to attempt an unlock in.
       document.addEventListener('touchstart', unlock, true);
       document.addEventListener('touchend', unlock, true);
+      document.addEventListener('click', unlock, true);
+
+      return self;
+    },
+
+    /**
+     * Get an unlocked HTML5 Audio object from the pool. If none are left,
+     * return a new Audio object and throw a warning.
+     * @return {Audio} HTML5 Audio object.
+     */
+    _obtainHtml5Audio: function() {
+      var self = this || Howler;
+
+      // Return the next object from the pool if one exists.
+      if (self._html5AudioPool.length) {
+        return self._html5AudioPool.pop();
+      }
+
+      //.Check if the audio is locked and throw a warning.
+      var testPlay = new Audio().play();
+      if (testPlay && typeof Promise !== 'undefined' && (testPlay instanceof Promise || typeof testPlay.then === 'function')) {
+        testPlay.catch(function() {
+          console.warn('HTML5 Audio pool exhausted, returning potentially locked audio object.');
+        });
+      }
+
+      return new Audio();
+    },
+
+    /**
+     * Return an activated HTML5 Audio object to the pool.
+     * @return {Howler}
+     */
+    _releaseHtml5Audio: function(audio) {
+      var self = this || Howler;
+
+      // Don't add audio to the pool if we don't know if it has been unlocked.
+      if (audio._unlocked) {
+        self._html5AudioPool.push(audio);
+      }
 
       return self;
     },
@@ -13702,6 +13846,7 @@ const text = function(value, var_args) {
       self._sounds = [];
       self._endTimers = {};
       self._queue = [];
+      self._playLock = false;
 
       // Setup event listeners.
       self._onend = o.onend ? [{fn: o.onend}] : [];
@@ -13716,14 +13861,15 @@ const text = function(value, var_args) {
       self._onvolume = o.onvolume ? [{fn: o.onvolume}] : [];
       self._onrate = o.onrate ? [{fn: o.onrate}] : [];
       self._onseek = o.onseek ? [{fn: o.onseek}] : [];
+      self._onunlock = o.onunlock ? [{fn: o.onunlock}] : [];
       self._onresume = [];
 
       // Web Audio or HTML5 Audio?
       self._webAudio = Howler.usingWebAudio && !self._html5;
 
-      // Automatically try to enable audio on iOS.
-      if (typeof Howler.ctx !== 'undefined' && Howler.ctx && Howler.mobileAutoEnable) {
-        Howler._enableMobileAudio();
+      // Automatically try to enable audio.
+      if (typeof Howler.ctx !== 'undefined' && Howler.ctx && Howler.autoUnlock) {
+        Howler._unlockAudio();
       }
 
       // Keep track of this Howl group in the global controller.
@@ -13851,20 +13997,22 @@ const text = function(value, var_args) {
         // Use the default sound sprite (plays the full audio length).
         sprite = '__default';
 
-        // Check if there is a single paused sound that isn't ended.
-        // If there is, play that sound. If not, continue as usual.
-        var num = 0;
-        for (var i=0; i<self._sounds.length; i++) {
-          if (self._sounds[i]._paused && !self._sounds[i]._ended) {
-            num++;
-            id = self._sounds[i]._id;
+        // Check if there is a single paused sound that isn't ended. 
+        // If there is, play that sound. If not, continue as usual.  
+        if (!self._playLock) {
+          var num = 0;
+          for (var i=0; i<self._sounds.length; i++) {
+            if (self._sounds[i]._paused && !self._sounds[i]._ended) {
+              num++;
+              id = self._sounds[i]._id;
+            }
           }
-        }
 
-        if (num === 1) {
-          sprite = null;
-        } else {
-          id = null;
+          if (num === 1) {
+            sprite = null;
+          } else {
+            id = null;
+          }
         }
       }
 
@@ -13888,7 +14036,7 @@ const text = function(value, var_args) {
         // Set the sprite value on this sound.
         sound._sprite = sprite;
 
-        // Makr this sounded as not ended in case another sound is played before this one loads.
+        // Mark this sound as not ended in case another sound is played before this one loads.
         sound._ended = false;
 
         // Add the sound to the queue to be played on load.
@@ -13907,9 +14055,7 @@ const text = function(value, var_args) {
       if (id && !sound._paused) {
         // Trigger the play event, in order to keep iterating through queue.
         if (!internal) {
-          setTimeout(function() {
-            self._emit('play', sound._id);
-          }, 0);
+          self._loadQueue('play');
         }
 
         return sound._id;
@@ -13924,21 +14070,37 @@ const text = function(value, var_args) {
       var seek = Math.max(0, sound._seek > 0 ? sound._seek : self._sprite[sprite][0] / 1000);
       var duration = Math.max(0, ((self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000) - seek);
       var timeout = (duration * 1000) / Math.abs(sound._rate);
-
-      // Update the parameters of the sound
-      sound._paused = false;
-      sound._ended = false;
+      var start = self._sprite[sprite][0] / 1000;
+      var stop = (self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000;
+      var loop = !!(sound._loop || self._sprite[sprite][2]);
       sound._sprite = sprite;
-      sound._seek = seek;
-      sound._start = self._sprite[sprite][0] / 1000;
-      sound._stop = (self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000;
-      sound._loop = !!(sound._loop || self._sprite[sprite][2]);
+
+      // Mark the sound as ended instantly so that this async playback
+      // doesn't get grabbed by another call to play while this one waits to start.
+      sound._ended = false;
+
+      // Update the parameters of the sound.
+      var setParams = function() {
+        sound._paused = false;
+        sound._seek = seek;
+        sound._start = start;
+        sound._stop = stop;
+        sound._loop = loop;
+      };
+
+      // End the sound instantly if seek is at the end.
+      if (seek >= stop) {
+        self._ended(sound);
+        return;
+      }
 
       // Begin the actual playback.
       var node = sound._node;
       if (self._webAudio) {
         // Fire this when the sound is ready to play to begin Web Audio playback.
         var playWebAudio = function() {
+          self._playLock = false;
+          setParams();
           self._refreshBuffer(sound);
 
           // Setup the playback params.
@@ -13961,6 +14123,7 @@ const text = function(value, var_args) {
           if (!internal) {
             setTimeout(function() {
               self._emit('play', sound._id);
+              self._loadQueue();
             }, 0);
           }
         };
@@ -13968,6 +14131,9 @@ const text = function(value, var_args) {
         if (Howler.state === 'running') {
           playWebAudio();
         } else {
+          self._playLock = true;
+
+          // Wait for the audio context to resume before playing.
           self.once('resume', playWebAudio);
 
           // Cancel the end timer.
@@ -13981,35 +14147,85 @@ const text = function(value, var_args) {
           node.volume = sound._volume * Howler.volume();
           node.playbackRate = sound._rate;
 
-          // Mobile browsers will throw an error if this is called without user interaction.
+          // Some browsers will throw an error if this is called without user interaction.
           try {
-            node.play();
+            var play = node.play();
+
+            // Support older browsers that don't support promises, and thus don't have this issue.
+            if (play && typeof Promise !== 'undefined' && (play instanceof Promise || typeof play.then === 'function')) {
+              // Implements a lock to prevent DOMException: The play() request was interrupted by a call to pause().
+              self._playLock = true;
+
+              // Set param values immediately.
+              setParams();
+
+              // Releases the lock and executes queued actions.
+              play
+                .then(function() {
+                  self._playLock = false;
+                  node._unlocked = true;
+                  if (!internal) {
+                    self._emit('play', sound._id);
+                    self._loadQueue();
+                  }
+                })
+                .catch(function() {
+                  self._playLock = false;
+                  self._emit('playerror', sound._id, 'Playback was unable to start. This is most commonly an issue ' +
+                    'on mobile devices and Chrome where playback was not within a user interaction.');
+
+                  // Reset the ended and paused values.
+                  sound._ended = true;
+                  sound._paused = true;
+                });
+            } else if (!internal) {
+              self._playLock = false;
+              setParams();
+              self._emit('play', sound._id);
+              self._loadQueue();
+            }
+
+            // Setting rate before playing won't work in IE, so we set it again here.
+            node.playbackRate = sound._rate;
 
             // If the node is still paused, then we can assume there was a playback issue.
             if (node.paused) {
               self._emit('playerror', sound._id, 'Playback was unable to start. This is most commonly an issue ' +
-                'on mobile devices where playback was not within a user interaction.');
+                'on mobile devices and Chrome where playback was not within a user interaction.');
               return;
             }
 
-            // Setup the new end timer.
-            if (timeout !== Infinity) {
+            // Setup the end timer on sprites or listen for the ended event.
+            if (sprite !== '__default' || sound._loop) {
               self._endTimers[sound._id] = setTimeout(self._ended.bind(self, sound), timeout);
-            }
+            } else {
+              self._endTimers[sound._id] = function() {
+                // Fire ended on this audio node.
+                self._ended(sound);
 
-            if (!internal) {
-              self._emit('play', sound._id);
+                // Clear this listener.
+                node.removeEventListener('ended', self._endTimers[sound._id], false);
+              };
+              node.addEventListener('ended', self._endTimers[sound._id], false);
             }
           } catch (err) {
             self._emit('playerror', sound._id, err);
           }
         };
 
+        // If this is streaming audio, make sure the src is set and load again.
+        if (node.src === 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA') {
+          node.src = self._src;
+          node.load();
+        }
+
         // Play immediately if ready, or wait for the 'canplaythrough'e vent.
         var loadedNoReadyState = (window && window.ejecta) || (!node.readyState && Howler._navigator.isCocoonJS);
-        if (node.readyState === 4 || loadedNoReadyState) {
+        if (node.readyState >= 3 || loadedNoReadyState) {
           playHtml5();
         } else {
+          self._playLock = true;
+
           var listener = function() {
             // Begin playback.
             playHtml5();
@@ -14035,8 +14251,8 @@ const text = function(value, var_args) {
     pause: function(id) {
       var self = this;
 
-      // If the sound hasn't loaded, add it to the load queue to pause when capable.
-      if (self._state !== 'loaded') {
+      // If the sound hasn't loaded or a play() promise is pending, add it to the load queue to pause when capable.
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'pause',
           action: function() {
@@ -14106,7 +14322,7 @@ const text = function(value, var_args) {
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to stop when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'stop',
           action: function() {
@@ -14153,6 +14369,11 @@ const text = function(value, var_args) {
             } else if (!isNaN(sound._node.duration) || sound._node.duration === Infinity) {
               sound._node.currentTime = sound._start || 0;
               sound._node.pause();
+
+              // If this is a live stream, stop download once the audio is stopped.
+              if (sound._node.duration === Infinity) {
+                self._clearSound(sound._node);
+              }
             }
           }
 
@@ -14175,7 +14396,7 @@ const text = function(value, var_args) {
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to mute when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded'|| self._playLock) {
         self._queue.push({
           event: 'mute',
           action: function() {
@@ -14204,6 +14425,11 @@ const text = function(value, var_args) {
 
         if (sound) {
           sound._muted = muted;
+
+          // Cancel active fade and set the volume to the end value.
+          if (sound._interval) {
+            self._stopFade(sound._id);
+          }
 
           if (self._webAudio && sound._node) {
             sound._node.gain.setValueAtTime(muted ? 0 : sound._volume, Howler.ctx.currentTime);
@@ -14253,7 +14479,7 @@ const text = function(value, var_args) {
       var sound;
       if (typeof vol !== 'undefined' && vol >= 0 && vol <= 1) {
         // If the sound hasn't loaded, add it to the load queue to change volume when capable.
-        if (self._state !== 'loaded') {
+        if (self._state !== 'loaded'|| self._playLock) {
           self._queue.push({
             event: 'volume',
             action: function() {
@@ -14312,7 +14538,7 @@ const text = function(value, var_args) {
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to fade when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'fade',
           action: function() {
@@ -14322,6 +14548,11 @@ const text = function(value, var_args) {
 
         return self;
       }
+
+      // Make sure the to/from/len values are numbers.
+      from = parseFloat(from);
+      to = parseFloat(to);
+      len = parseFloat(len);
 
       // Set the volume to the start position.
       self.volume(from, id);
@@ -14348,7 +14579,7 @@ const text = function(value, var_args) {
             sound._node.gain.linearRampToValueAtTime(to, end);
           }
 
-          self._startFadeInterval(sound, from, to, len, ids[i]);
+          self._startFadeInterval(sound, from, to, len, ids[i], typeof id === 'undefined');
         }
       }
 
@@ -14362,26 +14593,25 @@ const text = function(value, var_args) {
      * @param  {Number} to   The volume to fade to (0.0 to 1.0).
      * @param  {Number} len  Time in milliseconds to fade.
      * @param  {Number} id   The sound id to fade.
+     * @param  {Boolean} isGroup   If true, set the volume on the group.
      */
-    _startFadeInterval: function(sound, from, to, len, id) {
+    _startFadeInterval: function(sound, from, to, len, id, isGroup) {
       var self = this;
       var vol = from;
-      var dir = from > to ? 'out' : 'in';
-      var diff = Math.abs(from - to);
-      var steps = diff / 0.01;
-      var stepLen = (steps > 0) ? len / steps : len;
+      var diff = to - from;
+      var steps = Math.abs(diff / 0.01);
+      var stepLen = Math.max(4, (steps > 0) ? len / steps : len);
+      var lastTick = Date.now();
 
-      // Since browsers clamp timeouts to 4ms, we need to clamp our steps to that too.
-      if (stepLen < 4) {
-        steps = Math.ceil(steps / (4 / stepLen));
-        stepLen = 4;
-      }
+      // Store the value being faded to.
+      sound._fadeTo = to;
 
+      // Update the volume value on each interval tick.
       sound._interval = setInterval(function() {
-        // Update the volume amount, but only if the volume should change.
-        if (steps > 0) {
-          vol += (dir === 'in' ? 0.01 : -0.01);
-        }
+        // Update the volume based on the time since the last tick.
+        var tick = (Date.now() - lastTick) / len;
+        lastTick = Date.now();
+        vol += diff * tick;
 
         // Make sure the volume is in the right bounds.
         vol = Math.max(0, vol);
@@ -14392,19 +14622,21 @@ const text = function(value, var_args) {
 
         // Change the volume.
         if (self._webAudio) {
-          if (typeof id === 'undefined') {
-            self._volume = vol;
-          }
-
           sound._volume = vol;
         } else {
           self.volume(vol, sound._id, true);
+        }
+
+        // Set the group's volume.
+        if (isGroup) {
+          self._volume = vol;
         }
 
         // When the fade is complete, stop it and fire event.
         if ((to < from && vol <= to) || (to > from && vol >= to)) {
           clearInterval(sound._interval);
           sound._interval = null;
+          sound._fadeTo = null;
           self.volume(to, sound._id);
           self._emit('fade', sound._id);
         }
@@ -14428,6 +14660,8 @@ const text = function(value, var_args) {
 
         clearInterval(sound._interval);
         sound._interval = null;
+        self.volume(sound._fadeTo, id);
+        sound._fadeTo = null;
         self._emit('fade', id);
       }
 
@@ -14520,7 +14754,7 @@ const text = function(value, var_args) {
       var sound;
       if (typeof rate === 'number') {
         // If the sound hasn't loaded, add it to the load queue to change playback rate when capable.
-        if (self._state !== 'loaded') {
+        if (self._state !== 'loaded' || self._playLock) {
           self._queue.push({
             event: 'rate',
             action: function() {
@@ -14545,13 +14779,15 @@ const text = function(value, var_args) {
           if (sound) {
             // Keep track of our position when the rate changed and update the playback
             // start position so we can properly adjust the seek position for time elapsed.
-            sound._rateSeek = self.seek(id[i]);
-            sound._playStart = self._webAudio ? Howler.ctx.currentTime : sound._playStart;
+            if (self.playing(id[i])) {
+              sound._rateSeek = self.seek(id[i]);
+              sound._playStart = self._webAudio ? Howler.ctx.currentTime : sound._playStart;
+            }
             sound._rate = rate;
 
             // Change the playback rate.
             if (self._webAudio && sound._node && sound._node.bufferSource) {
-              sound._node.bufferSource.playbackRate.value = rate;
+              sound._node.bufferSource.playbackRate.setValueAtTime(rate, Howler.ctx.currentTime);
             } else if (sound._node) {
               sound._node.playbackRate = rate;
             }
@@ -14616,7 +14852,7 @@ const text = function(value, var_args) {
       }
 
       // If the sound hasn't loaded, add it to the load queue to seek when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'seek',
           action: function() {
@@ -14643,17 +14879,34 @@ const text = function(value, var_args) {
           sound._ended = false;
           self._clearTimer(id);
 
-          // Restart the playback if the sound was playing.
-          if (playing) {
-            self.play(id, true);
-          }
-
           // Update the seek position for HTML5 Audio.
-          if (!self._webAudio && sound._node) {
+          if (!self._webAudio && sound._node && !isNaN(sound._node.duration)) {
             sound._node.currentTime = seek;
           }
 
-          self._emit('seek', id);
+          // Seek and emit when ready.
+          var seekAndEmit = function() {
+            self._emit('seek', id);
+
+            // Restart the playback if the sound was playing.
+            if (playing) {
+              self.play(id, true);
+            }
+          };
+
+          // Wait for the play lock to be unset before emitting (HTML5 Audio).
+          if (playing && !self._webAudio) {
+            var emitSeek = function() {
+              if (!self._playLock) {
+                seekAndEmit();
+              } else {
+                setTimeout(emitSeek, 0);
+              }
+            };
+            setTimeout(emitSeek, 0);
+          } else {
+            seekAndEmit();
+          }
         } else {
           if (self._webAudio) {
             var realTime = self.playing(id) ? Howler.ctx.currentTime - sound._playStart : 0;
@@ -14736,14 +14989,14 @@ const text = function(value, var_args) {
         // Remove the source or disconnect.
         if (!self._webAudio) {
           // Set the source to 0-second silence to stop any downloading (except in IE).
-          var checkIE = /MSIE |Trident\//.test(Howler._navigator && Howler._navigator.userAgent);
-          if (!checkIE) {
-            sounds[i]._node.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-          }
+          self._clearSound(sounds[i]._node);
 
           // Remove any event listeners.
           sounds[i]._node.removeEventListener('error', sounds[i]._errorFn, false);
           sounds[i]._node.removeEventListener(Howler._canPlayEvent, sounds[i]._loadFn, false);
+
+          // Release the Audio object back to the pool.
+          Howler._releaseHtml5Audio(sounds[i]._node);
         }
 
         // Empty out all of the nodes.
@@ -14751,18 +15004,18 @@ const text = function(value, var_args) {
 
         // Make sure all timers are cleared out.
         self._clearTimer(sounds[i]._id);
+      }
 
-        // Remove the references in the global Howler object.
-        var index = Howler._howls.indexOf(self);
-        if (index >= 0) {
-          Howler._howls.splice(index, 1);
-        }
+      // Remove the references in the global Howler object.
+      var index = Howler._howls.indexOf(self);
+      if (index >= 0) {
+        Howler._howls.splice(index, 1);
       }
 
       // Delete this sound from the cache (if no other Howl is using it).
       var remCache = true;
       for (i=0; i<Howler._howls.length; i++) {
-        if (Howler._howls[i]._src === self._src) {
+        if (Howler._howls[i]._src === self._src || self._src.indexOf(Howler._howls[i]._src) >= 0) {
           remCache = false;
           break;
         }
@@ -14874,6 +15127,7 @@ const text = function(value, var_args) {
 
       // Loop through event store and fire all functions.
       for (var i=events.length-1; i>=0; i--) {
+        // Only fire the listener if the correct ID is used.
         if (!events[i].id || events[i].id === id || event === 'load') {
           setTimeout(function(fn) {
             fn.call(this, id, msg);
@@ -14886,6 +15140,9 @@ const text = function(value, var_args) {
         }
       }
 
+      // Pass the event type into load queue so that it can continue stepping.
+      self._loadQueue(event);
+
       return self;
     },
 
@@ -14895,19 +15152,22 @@ const text = function(value, var_args) {
      * after the previous has finished executing (even if async like play).
      * @return {Howl}
      */
-    _loadQueue: function() {
+    _loadQueue: function(event) {
       var self = this;
 
       if (self._queue.length > 0) {
         var task = self._queue[0];
 
-        // don't move onto the next task until this one is done
-        self.once(task.event, function() {
+        // Remove this task if a matching event was passed.
+        if (task.event === event) {
           self._queue.shift();
           self._loadQueue();
-        });
+        }
 
-        task.action();
+        // Run the task if no event type is passed.
+        if (!event) {
+          task.action();
+        }
       }
 
       return self;
@@ -14925,7 +15185,7 @@ const text = function(value, var_args) {
       // If we are using IE and there was network latency we may be clipping
       // audio before it completes playing. Lets check the node to make sure it
       // believes it has completed, before ending the playback.
-      if (!self._webAudio && sound._node && !sound._node.paused) {
+      if (!self._webAudio && sound._node && !sound._node.paused && !sound._node.ended && sound._node.currentTime < sound._stop) {
         setTimeout(self._ended.bind(self, sound), 100);
         return self;
       }
@@ -14969,7 +15229,7 @@ const text = function(value, var_args) {
 
       // When using a sprite, end the track.
       if (!self._webAudio && !loop) {
-        self.stop(sound._id);
+        self.stop(sound._id, true);
       }
 
       return self;
@@ -14984,7 +15244,16 @@ const text = function(value, var_args) {
       var self = this;
 
       if (self._endTimers[id]) {
-        clearTimeout(self._endTimers[id]);
+        // Clear the timeout or remove the ended listener.
+        if (typeof self._endTimers[id] !== 'function') {
+          clearTimeout(self._endTimers[id]);
+        } else {
+          var sound = self._soundById(id);
+          if (sound && sound._node) {
+            sound._node.removeEventListener('ended', self._endTimers[id], false);
+          }
+        }
+
         delete self._endTimers[id];
       }
 
@@ -15112,9 +15381,9 @@ const text = function(value, var_args) {
       sound._node.bufferSource.loop = sound._loop;
       if (sound._loop) {
         sound._node.bufferSource.loopStart = sound._start || 0;
-        sound._node.bufferSource.loopEnd = sound._stop;
+        sound._node.bufferSource.loopEnd = sound._stop || 0;
       }
-      sound._node.bufferSource.playbackRate.value = sound._rate;
+      sound._node.bufferSource.playbackRate.setValueAtTime(sound._rate, Howler.ctx.currentTime);
 
       return self;
     },
@@ -15126,15 +15395,29 @@ const text = function(value, var_args) {
      */
     _cleanBuffer: function(node) {
       var self = this;
+      var isIOS = Howler._navigator && Howler._navigator.vendor.indexOf('Apple') >= 0;
 
-      if (self._scratchBuffer) {
+      if (Howler._scratchBuffer && node.bufferSource) {
         node.bufferSource.onended = null;
         node.bufferSource.disconnect(0);
-        try { node.bufferSource.buffer = self._scratchBuffer; } catch(e) {}
+        if (isIOS) {
+          try { node.bufferSource.buffer = Howler._scratchBuffer; } catch(e) {}
+        }
       }
       node.bufferSource = null;
 
       return self;
+    },
+
+    /**
+     * Set the source to a 0-second silence to stop any downloading (except in IE).
+     * @param  {Object} node Audio node to clear.
+     */
+    _clearSound: function(node) {
+      var checkIE = /MSIE |Trident\//.test(Howler._navigator && Howler._navigator.userAgent);
+      if (!checkIE) {
+        node.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      }
     }
   };
 
@@ -15196,7 +15479,8 @@ const text = function(value, var_args) {
         self._node.paused = true;
         self._node.connect(Howler.masterGain);
       } else {
-        self._node = new Audio();
+        // Get an unlocked Audio object from the pool.
+        self._node = Howler._obtainHtml5Audio();
 
         // Listen for errors (http://dev.w3.org/html5/spec-author-view/spec.html#mediaerror).
         self._errorFn = self._errorListener.bind(self);
@@ -15362,16 +15646,28 @@ const text = function(value, var_args) {
    * @param  {Howl}        self
    */
   var decodeAudioData = function(arraybuffer, self) {
-    // Decode the buffer into an audio source.
-    Howler.ctx.decodeAudioData(arraybuffer, function(buffer) {
+    // Fire a load error if something broke.
+    var error = function() {
+      self._emit('loaderror', null, 'Decoding audio data failed.');
+    };
+
+    // Load the sound on success.
+    var success = function(buffer) {
       if (buffer && self._sounds.length > 0) {
         cache[self._src] = buffer;
         loadSound(self, buffer);
+      } else {
+        error();
       }
-    }, function() {
-      self._emit('loaderror', null, 'Decoding audio data failed.');
-    });
-  };
+    };
+
+    // Decode the buffer into an audio source.
+    if (typeof Promise !== 'undefined' && Howler.ctx.decodeAudioData.length === 1) {
+      Howler.ctx.decodeAudioData(arraybuffer).then(success).catch(error);
+    } else {
+      Howler.ctx.decodeAudioData(arraybuffer, success, error);
+    }
+  }
 
   /**
    * Sound is now loaded, so finish setting everything up and fire the loaded event.
@@ -15401,6 +15697,11 @@ const text = function(value, var_args) {
    * Setup the audio context when available, or switch to HTML5 Audio mode.
    */
   var setupAudioContext = function() {
+    // If we have already detected that Web Audio isn't supported, don't run this step again.
+    if (!Howler.usingWebAudio) {
+      return;
+    }
+
     // Check if we are using Web Audio and setup the AudioContext if we are.
     try {
       if (typeof AudioContext !== 'undefined') {
@@ -15411,6 +15712,11 @@ const text = function(value, var_args) {
         Howler.usingWebAudio = false;
       }
     } catch(e) {
+      Howler.usingWebAudio = false;
+    }
+
+    // If the audio context creation still failed, set using web audio to false.
+    if (!Howler.ctx) {
       Howler.usingWebAudio = false;
     }
 
@@ -15429,7 +15735,7 @@ const text = function(value, var_args) {
     // Create and expose the master GainNode when using Web Audio (useful for plugins or advanced usage).
     if (Howler.usingWebAudio) {
       Howler.masterGain = (typeof Howler.ctx.createGain === 'undefined') ? Howler.ctx.createGainNode() : Howler.ctx.createGain();
-      Howler.masterGain.gain.value = Howler._muted ? 0 : 1;
+      Howler.masterGain.gain.setValueAtTime(Howler._muted ? 0 : 1, Howler.ctx.currentTime);
       Howler.masterGain.connect(Howler.ctx.destination);
     }
 
@@ -15439,12 +15745,12 @@ const text = function(value, var_args) {
 
   // Add support for AMD (Asynchronous Module Definition) libraries such as require.js.
   if (true) {
-    !(__WEBPACK_AMD_DEFINE_ARRAY__ = [], __WEBPACK_AMD_DEFINE_RESULT__ = function() {
+    !(__WEBPACK_AMD_DEFINE_ARRAY__ = [], __WEBPACK_AMD_DEFINE_RESULT__ = (function() {
       return {
         Howler: Howler,
         Howl: Howl
       };
-    }.apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__),
+    }).apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__),
 				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
   }
 
@@ -15472,10 +15778,10 @@ const text = function(value, var_args) {
 /*!
  *  Spatial Plugin - Adds support for stereo and 3D audio where Web Audio is supported.
  *  
- *  howler.js v2.0.5
+ *  howler.js v2.1.2
  *  howlerjs.com
  *
- *  (c) 2013-2017, James Simpson of GoldFire Studios
+ *  (c) 2013-2019, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -15488,7 +15794,7 @@ const text = function(value, var_args) {
   // Setup default properties.
   HowlerGlobal.prototype._pos = [0, 0, 0];
   HowlerGlobal.prototype._orientation = [0, 0, -1, 0, 1, 0];
-  
+
   /** Global Methods **/
   /***************************************************************************/
 
@@ -15536,7 +15842,14 @@ const text = function(value, var_args) {
 
     if (typeof x === 'number') {
       self._pos = [x, y, z];
-      self.ctx.listener.setPosition(self._pos[0], self._pos[1], self._pos[2]);
+
+      if (typeof self.ctx.listener.positionX !== 'undefined') {
+        self.ctx.listener.positionX.setTargetAtTime(self._pos[0], Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.positionY.setTargetAtTime(self._pos[1], Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.positionZ.setTargetAtTime(self._pos[2], Howler.ctx.currentTime, 0.1);
+      } else {
+        self.ctx.listener.setPosition(self._pos[0], self._pos[1], self._pos[2]);
+      }
     } else {
       return self._pos;
     }
@@ -15576,7 +15889,17 @@ const text = function(value, var_args) {
 
     if (typeof x === 'number') {
       self._orientation = [x, y, z, xUp, yUp, zUp];
-      self.ctx.listener.setOrientation(x, y, z, xUp, yUp, zUp);
+
+      if (typeof self.ctx.listener.forwardX !== 'undefined') {
+        self.ctx.listener.forwardX.setTargetAtTime(x, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.forwardY.setTargetAtTime(y, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.forwardZ.setTargetAtTime(z, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upX.setTargetAtTime(x, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upY.setTargetAtTime(y, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upZ.setTargetAtTime(z, Howler.ctx.currentTime, 0.1);
+      } else {
+        self.ctx.listener.setOrientation(x, y, z, xUp, yUp, zUp);
+      }
     } else {
       return or;
     }
@@ -15682,9 +16005,15 @@ const text = function(value, var_args) {
             }
 
             if (pannerType === 'spatial') {
-              sound._panner.setPosition(pan, 0, 0);
+              if (typeof sound._panner.positionX !== 'undefined') {
+                sound._panner.positionX.setValueAtTime(pan, Howler.ctx.currentTime);
+                sound._panner.positionY.setValueAtTime(0, Howler.ctx.currentTime);
+                sound._panner.positionZ.setValueAtTime(0, Howler.ctx.currentTime);
+              } else {
+                sound._panner.setPosition(pan, 0, 0);
+              }
             } else {
-              sound._panner.pan.value = pan;
+              sound._panner.pan.setValueAtTime(pan, Howler.ctx.currentTime);
             }
           }
 
@@ -15756,7 +16085,13 @@ const text = function(value, var_args) {
               setupPanner(sound, 'spatial');
             }
 
-            sound._panner.setPosition(x, y, z);
+            if (typeof sound._panner.positionX !== 'undefined') {
+              sound._panner.positionX.setValueAtTime(x, Howler.ctx.currentTime);
+              sound._panner.positionY.setValueAtTime(y, Howler.ctx.currentTime);
+              sound._panner.positionZ.setValueAtTime(z, Howler.ctx.currentTime);
+            } else {
+              sound._panner.setPosition(x, y, z);
+            }
           }
 
           self._emit('pos', sound._id);
@@ -15834,7 +16169,13 @@ const text = function(value, var_args) {
               setupPanner(sound, 'spatial');
             }
 
-            sound._panner.setOrientation(x, y, z);
+            if (typeof sound._panner.orientationX !== 'undefined') {
+              sound._panner.orientationX.setValueAtTime(x, Howler.ctx.currentTime);
+              sound._panner.orientationY.setValueAtTime(y, Howler.ctx.currentTime);
+              sound._panner.orientationZ.setValueAtTime(z, Howler.ctx.currentTime);
+            } else {
+              sound._panner.setOrientation(x, y, z);
+            }
           }
 
           self._emit('orientation', sound._id);
@@ -15874,7 +16215,7 @@ const text = function(value, var_args) {
    *                     with `inverse` and `exponential`.
    *     panningModel - ('HRTF' by default) Determines which spatialization algorithm is used to position audio.
    *                     Can be `HRTF` or `equalpower`.
-   * 
+   *
    * @return {Howl/Object} Returns self or current panner attributes.
    */
   Howl.prototype.pannerAttr = function() {
@@ -16019,8 +16360,21 @@ const text = function(value, var_args) {
 
       // Reset all spatial plugin properties on this sound.
       self._orientation = parent._orientation;
+      self._stereo = parent._stereo;
       self._pos = parent._pos;
       self._pannerAttr = parent._pannerAttr;
+
+      // If a stereo or position was specified, set it up.
+      if (self._stereo) {
+        parent.stereo(self._stereo);
+      } else if (self._pos) {
+        parent.pos(self._pos[0], self._pos[1], self._pos[2], self._id);
+      } else if (self._panner) {
+        // Disconnect the panner.
+        self._panner.disconnect(0);
+        self._panner = undefined;
+        parent._refreshBuffer(self);
+      }
 
       // Complete resetting of the sound.
       return _super.call(this);
@@ -16049,34 +16403,52 @@ const text = function(value, var_args) {
       sound._panner.refDistance = sound._pannerAttr.refDistance;
       sound._panner.rolloffFactor = sound._pannerAttr.rolloffFactor;
       sound._panner.panningModel = sound._pannerAttr.panningModel;
-      sound._panner.setPosition(sound._pos[0], sound._pos[1], sound._pos[2]);
-      sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
+
+      if (typeof sound._panner.positionX !== 'undefined') {
+        sound._panner.positionX.setValueAtTime(sound._pos[0], Howler.ctx.currentTime);
+        sound._panner.positionY.setValueAtTime(sound._pos[1], Howler.ctx.currentTime);
+        sound._panner.positionZ.setValueAtTime(sound._pos[2], Howler.ctx.currentTime);
+      } else {
+        sound._panner.setPosition(sound._pos[0], sound._pos[1], sound._pos[2]);
+      }
+
+      if (typeof sound._panner.orientationX !== 'undefined') {
+        sound._panner.orientationX.setValueAtTime(sound._orientation[0], Howler.ctx.currentTime);
+        sound._panner.orientationY.setValueAtTime(sound._orientation[1], Howler.ctx.currentTime);
+        sound._panner.orientationZ.setValueAtTime(sound._orientation[2], Howler.ctx.currentTime);
+      } else {
+        sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
+      }
     } else {
       sound._panner = Howler.ctx.createStereoPanner();
-      sound._panner.pan.value = sound._stereo;
+      sound._panner.pan.setValueAtTime(sound._stereo, Howler.ctx.currentTime);
     }
 
     sound._panner.connect(sound._node);
 
     // Update the connections.
     if (!sound._paused) {
-      sound._parent.pause(sound._id, true).play(sound._id);
+      sound._parent.pause(sound._id, true).play(sound._id, true);
     }
   };
 })();
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
 
 /***/ }),
-/* 20 */
+/* 19 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__TankWalls_js__ = __webpack_require__(21);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__Ball_js__ = __webpack_require__(22);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__TankWalls_js__ = __webpack_require__(20);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__Ball_js__ = __webpack_require__(21);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__HabitHelper_js__ = __webpack_require__(4);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__CreateAnimator_js__ = __webpack_require__(24);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__TouchState_js__ = __webpack_require__(25);
+
+
 
 
 
@@ -16095,9 +16467,13 @@ class BallTank extends HTMLElement{
     }
 
     setHabits(habits){
+
         this._habits = habits;
+
         this._renderHabits()
     }
+
+    
 
     associateHabitToCreatedBall(habit){
         this.habitsAndBallsMap.set(habit, this._habitLessBall);
@@ -16122,6 +16498,8 @@ class BallTank extends HTMLElement{
         this.habitsAndBallsMap.delete(habit);
 
         ball.remove();
+
+        this._habits = this._habits.filter(targetHabit => habit !== targetHabit)
     }
 
     cancelCreation(){
@@ -16197,6 +16575,7 @@ class BallTank extends HTMLElement{
 
     _setupWorld(){
         this._engine = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Engine.create();
+        this._world = this._engine.world;
 
         // removing gravity
         this._engine.world.gravity.scale = 0;
@@ -16212,7 +16591,7 @@ class BallTank extends HTMLElement{
                 width: window.innerWidth,
                 height: window.innerHeight,
                 wireframes: false,
-                background: '#1b1b33'
+                background: '#3d3a57'
             }
         });
 
@@ -16239,37 +16618,93 @@ class BallTank extends HTMLElement{
 
         this.dispatchEvent(new CustomEvent(BallTank.PROMPT_CREATE,{detail: ball}));   
     }
-
+    
     _setupSelectionBehavior(){
+
+        this._touchState = new __WEBPACK_IMPORTED_MODULE_5__TouchState_js__["a" /* default */](this._mouseConstraint);
+        this._touchState.addEventListener('longpressstart', e => {
+            this._startedLongPress(e.detail);
+            this._deselectHabit();
+        })
+
+        this._touchState.addEventListener('longpresscancel', e => {
+            this._stoppedLongPress()
+        })
+
+        this._touchState.addEventListener('longpressend', e => {
+            this._stoppedLongPress();
+            if(!this._habitLessBall)
+                this._addBall(e.detail.x ,e.detail.y);    
+        })
+
+        this._touchState.addEventListener('select', e => {
+            this._stoppedLongPress();
+            const selectedBall = e.detail;
+
+            // This is protecting for the case
+            // where the user tries to select a ball 
+            // that is not yet saved
+            if(selectedBall.saved){
+                this._selectHabit(this.habitsAndBallsMap.get(selectedBall))
+            }
+        })
+
+    }
+    _setupSelectionBehavior2(){
         let startDrag = false;
         let selectedBall = null;
         const longpressTime = 1000;
         let couldBeLongpress = false;
         const circleDiameter = 15;
         let dragOnGoing = false;
+        this._downPoint = null;
+        let distanceFromDownPoint = 0;
+        let startedLongPress = false;
 
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'mousedown', e => {            
-            
+            console.log(e)
+            this._downPoint = e.mouse.mousedownPosition;
+            console.log('mouse down', e)
             if(dragOnGoing) return;
             
             couldBeLongpress = true;
+            distanceFromDownPoint = 0;
+            setTimeout(_ => {
+                if(distanceFromDownPoint !== false && distanceFromDownPoint < 30){
+                    startedLongPress = true;
+                    this._startedLongPress();
+                }
+            }, 100)
+
             setTimeout(_ => {
                 if(couldBeLongpress){
                     if(!this._habitLessBall){
                         const {x,y} = e.mouse.position;
                         this._addBall(x,y);    
                     }
-
+                    this._stoppedLongPress();
                     couldBeLongpress = false;
                 } 
             }, longpressTime);
         })
     
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'mousemove', e => {
-            
+            console.log('Mouse moving')
+            if(this._downPoint){
+
+                const deltaPosition = {
+                    deltaX: e.mouse.position.x - this._downPoint.x,
+                    deltaY: e.mouse.position.y - this._downPoint.y
+                };
+
+                distanceFromDownPoint = Math.sqrt(
+                    Math.pow(deltaPosition.deltaX, 2) + Math.pow(deltaPosition.deltaY, 2)
+                );
+            }
         })
 
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'startdrag', e => {
+            console.log('start drag', e)
             dragOnGoing = true;
             couldBeLongpress = false;
             startDrag = true;
@@ -16278,8 +16713,14 @@ class BallTank extends HTMLElement{
 
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'mouseup', _ => {
             dragOnGoing = false;
+            this._downPoint = null;
+            distanceFromDownPoint = false;
             couldBeLongpress = false;
-            if(startDrag){
+            startedLongPress = false;
+
+            this._stoppedLongPress();
+
+            if(startDrag && selectedBall){
 
                 // This is protecting for the case
                 // where the user tries to select a ball 
@@ -16305,6 +16746,19 @@ class BallTank extends HTMLElement{
         return ball;
     }
 
+    _startedLongPress(point){
+        // create new create animation around the downpoint
+        this._createAnimator = new __WEBPACK_IMPORTED_MODULE_4__CreateAnimator_js__["a" /* default */](this._world, point);
+    }
+
+    _stoppedLongPress(){
+        // when a user interupts the longpress we 
+        // remove the animator and its bodies
+        if(this._createAnimator){
+            this._createAnimator.remove()
+            this._createAnimator = null;
+        }
+    }
 }
 /* unused harmony export default */
 
@@ -16315,11 +16769,11 @@ BallTank.HABIT_DESELECTED = 'habitdeselected';
 customElements.define('s-ball-tank', BallTank);
 
 /***/ }),
-/* 21 */
+/* 20 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
 
 
@@ -16388,19 +16842,20 @@ class TankWalls{
 
 
 /***/ }),
-/* 22 */
+/* 21 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js__ = __webpack_require__(23);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js__ = __webpack_require__(22);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(4);
 
 
 
 __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.use(__WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js___default.a);
+
 
 
 class Ball{
@@ -16410,12 +16865,15 @@ class Ball{
         this._world = world;
         this._constraints = [];
         this.tickRadius = 5;
-        this.circleRadius = 20
+        let circleRadius = 20;
+        this.circleRadius = circleRadius
         this._color = color;
         let bodyColor = color;
         if(isDecaying){
             bodyColor = 'gray';
         }
+
+        let scaling = 0.2;
         this.circle = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Bodies.circle(
             x, y-50, 5, 
             {
@@ -16427,8 +16885,8 @@ class Ball{
                 render: {
                     sprite: {
                         texture: './assets/'+bodyColor+'-sprite-r20.png',
-                        yScale: 0.2,
-                        xScale: 0.2,
+                        yScale: scaling,
+                        xScale: scaling,
                     }
                 },
 
@@ -16562,7 +17020,7 @@ class Ball{
 
 
 /***/ }),
-/* 23 */
+/* 22 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /*!
@@ -16572,7 +17030,7 @@ class Ball{
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(true)
-		module.exports = factory(__webpack_require__(24));
+		module.exports = factory(__webpack_require__(23));
 	else if(typeof define === 'function' && define.amd)
 		define(["matter-js"], factory);
 	else if(typeof exports === 'object')
@@ -16804,7 +17262,7 @@ module.exports = MatterAttractors;
 });
 
 /***/ }),
-/* 24 */
+/* 23 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {var require;var require;/**
@@ -27084,14 +27542,393 @@ var Vector = _dereq_('../geometry/Vector');
 
 },{"../body/Composite":2,"../core/Common":14,"../core/Events":16,"../geometry/Bounds":26,"../geometry/Vector":28}]},{},[30])(30)
 });
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ }),
+/* 24 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
+
+
+const smallBodySize = 4;
+
+class CreateAnimator{
+    constructor(world, downPoint){
+        this._boundingRectWidth = 200;
+        this._smallBodies = [];
+        this._fingerOffset = 50;
+        this._world = world;
+        this._downPoint = downPoint;
+        
+        this._boundingRect = {
+            x: downPoint.x - this._boundingRectWidth/2,
+            y: downPoint.y - this._boundingRectWidth/2,
+            width: this._boundingRectWidth,
+            height: this._boundingRectWidth,
+        };
+        
+        // Create a static point at the downpoint
+        this.gravityPoint = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Bodies.circle(
+            downPoint.x, 
+            downPoint.y - this._fingerOffset, 
+            2,
+            { 
+                isStatic: true,
+                plugin: {
+                  attractors: [
+                      (bodyA, bodyB) => {
+                        if(this._smallBodies.includes(bodyB)){
+                            return {
+                              x: (bodyA.position.x - bodyB.position.x) * 1.8e-6,
+                              y: (bodyA.position.y - bodyB.position.y) * 1.8e-6,
+                            };    
+                        }
+                      }
+                  ]
+                }
+            },
+        );
+
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.World.add(this._world, this.gravityPoint);
+
+        // Create a loop over 2 seconds of small bodies being created
+        // and attracted to the static point
+        this._intervalId = setInterval(_ => {
+            if(this._isRemoved)
+                return clearInterval(this._intervalId);
+
+            this._createSmallBody()
+            if(this._smallBodies.length > 10){
+                clearInterval(this._intervalId);
+            }
+        }, 100)
+    }
+
+    _createSmallBody(){
+        const randomX = Math.random() * this._boundingRect.width + this._boundingRect.x;
+        const randomY = Math.random() * this._boundingRect.width + this._boundingRect.y;
+
+
+        const smallBody = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Bodies.circle(
+            randomX < 20 ? randomX + 20 : randomX, 
+            randomY < 20 ? randomY + 20 : randomY,
+            smallBodySize,
+            {
+                render:{
+                    fillStyle: '#d8d9d8'
+                }
+            }
+        );
+
+        this._smallBodies.push(smallBody);
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.World.add(this._world, [smallBody]);
+    }
+
+    remove(){
+        this._isRemoved = true;
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Composite.remove(this._world, this.gravityPoint);
+
+        this._smallBodies.forEach(body => {
+            this.animateOut(body)
+        })
+    }
+
+    animateOut(body){
+        const intervalId = setInterval(_ => {
+                
+            if(body.circleRadius < 1){
+                clearInterval(intervalId);
+                __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Composite.remove(this._world, body);
+            }else{
+                __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Body.scale(body, 0.90, 0.90);
+            }
+        }, 16)
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = CreateAnimator;
+
 
 /***/ }),
 /* 25 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__ = __webpack_require__(26);
+
+
+
+const STATE_NO_ACTION = 'No Action';
+const STATE_TOUCH_START = 'Touch Start';
+const STATE_BODY_TOUCH = 'Body Touch';
+const STATE_SELECT = 'Select';
+const STATE_FLING = 'Fling';
+const STATE_FLOOR_TOUCH = 'Floor Touch';
+const STATE_LONGPRESS = 'Longpress';
+const STATE_FINISHED = 'Finished';
+
+const LONG_PRESS_TIME = 1500;
+
+// the min distance a user can drag 
+// before its not counted as a longpress
+const MAX_LONGPRESS_TRAVEL = 50;
+
+// the min distance a user can drag 
+// before its not counted as a select
+const MAX_SELECT_TRAVEL = 50; 
+
+
+
+class TouchState extends __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__["a" /* default */]{
+
+    constructor(mouseConstraint){
+        super();
+        this.transitions = new Map();
+        this._state = STATE_NO_ACTION
+        
+        
+        this._setupTransitionEvents();
+
+        this._downPoint = {};
+        this._travelPoint = {};
+        let travelDistance = null;
+        let clearTimeoutId = 0;
+        
+
+        // If we hear a startdrag it means that the click
+        // was on top of a body. This means we can discard this action
+        // as a longpress.
+        // startdrag triggers BEFORE mousedown
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'startdrag', e => {
+            
+            if(this.state === STATE_FLOOR_TOUCH)
+                return;
+
+            this.state = STATE_BODY_TOUCH;
+            this._selectedBody = e.body;
+        })
+
+        // We get this event in both the body touch and the floor
+        // touch case 
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'mousedown', e => {
+
+            this._downPoint = {
+                x: e.mouse.position.x, 
+                y: e.mouse.position.y
+            };
+
+            // if we're already in a state of body touch
+            // we just ignore this event
+            if(this.state !== STATE_BODY_TOUCH){
+                this.state = STATE_FLOOR_TOUCH;
+
+                this._clearTimeoutId = setTimeout(_ => {
+
+                    // If the user touches the floor and drags the finger
+                    // we don't want to count it as a longpress - most likely
+                    // it was an attempted fling
+                    if(this.getDistance(this._downPoint, this._travelPoint) < MAX_LONGPRESS_TRAVEL){
+                        this.state = STATE_LONGPRESS;
+                    }else{
+                        this.state = STATE_NO_ACTION;
+                    }
+
+
+                    
+                }, LONG_PRESS_TIME)
+            }
+        })
+
+        // Next if we hear a mouse move we need to register
+        // the delta for the last mousemove
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'mousemove', e => {
+
+            // just register the last mouse position
+            // to be evaluated for fling or select
+            this._travelPoint = e.mouse.position;
+
+            // if we travel too far in the longpress we immediately 
+            // cancel the longpress
+            if(this.state === STATE_FLOOR_TOUCH && this.getDistance(this._downPoint, this._travelPoint) > MAX_LONGPRESS_TRAVEL){
+                this._clearTimeout(this._clearTimeoutId);
+
+                this.state = STATE_NO_ACTION;
+            }
+        });
+
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'mouseup', e => {
+            
+            // timeout is always cleared on mouse up
+            // this works even if there where none set
+            if(this._clearTimeoutId){
+                this._clearTimeout(clearTimeoutId);
+                this.state = STATE_NO_ACTION;    
+            }
+
+            if(this.state === STATE_BODY_TOUCH){
+                if(this.getDistance(this._downPoint, this._travelPoint) > MAX_SELECT_TRAVEL){
+                    this.state = STATE_FLING;
+                }else{
+                    this.state = STATE_SELECT;
+                }
+            }
+        });
+    }
+
+    _clearTimeout(){
+        clearTimeout(this._clearTimeoutId)
+        this._clearTimeoutId = 0;
+    }
+
+    _setupTransitionEvents(){
+        
+        this.transitions.set(STATE_NO_ACTION + STATE_BODY_TOUCH, _ => {
+            console.log('Body touch');
+        })
+
+        // this is when we know the touch was not a select
+        // but before we know if it's a full longpress 
+        this.transitions.set(STATE_NO_ACTION + STATE_FLOOR_TOUCH, _ => {
+            console.log('Floor Touch')
+            this.dispatchEvent(new CustomEvent('longpressstart', {detail: this._downPoint}));
+        })
+
+        // the user lifts his finger before we have a full
+        // longpress
+        this.transitions.set(STATE_FLOOR_TOUCH + STATE_NO_ACTION, _ => {
+            console.log('Longpress Cancel')
+            this.dispatchEvent(new CustomEvent('longpresscancel'));
+        })
+
+        // user longpresses fully
+        this.transitions.set(STATE_FLOOR_TOUCH + STATE_LONGPRESS, _ => {
+            console.log('Longpress')
+            this.dispatchEvent(new CustomEvent('longpressend', {detail: this._downPoint}));
+            this.state = STATE_NO_ACTION;
+        })
+
+        this.transitions.set(STATE_LONGPRESS + STATE_NO_ACTION, _ => {
+            console.log('No Action')
+        })
+
+        this.transitions.set(STATE_BODY_TOUCH + STATE_SELECT, _ => {
+            console.log('Select')
+            this.dispatchEvent(new CustomEvent('select', {detail: this._selectedBody.ball}));
+            this.state = STATE_NO_ACTION;
+            this._selectedBody = null;
+        })
+
+        this.transitions.set(STATE_BODY_TOUCH + STATE_FLING, _ => {
+            console.log('Fling')
+            this.dispatchEvent(new CustomEvent('fling'));
+            this.state = STATE_NO_ACTION;
+            this._selectedBody = null;
+        })
+
+        this.transitions.set(STATE_FLING + STATE_NO_ACTION, _ => {
+            console.log('No Action')
+        })
+
+        this.transitions.set(STATE_SELECT + STATE_NO_ACTION, _ => {
+            console.log('No Action')
+        })
+    }
+
+    set state(newState){
+        const oldState = this._state;
+        this._state = newState;
+        
+        const transitionHandler = this.transitions.get(oldState+newState);
+        if(transitionHandler)
+            transitionHandler.call();
+    }
+
+    get state(){
+        return this._state;
+    }
+
+    getDistance(pointA, pointB){
+
+        const deltaPosition = {
+            deltaX: pointA.x - pointB.x,
+            deltaY: pointA.y - pointB.y
+        };
+
+        // good old highschool geometry finally put to good use!
+        return Math.sqrt(
+            Math.pow(deltaPosition.deltaX, 2) + Math.pow(deltaPosition.deltaY, 2)
+        );
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = TouchState;
+
+
+/***/ }),
+/* 26 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+class EventEmitter{
+
+    constructor(){
+        this._handlersByType = new Map();
+    }
+
+    addEventListener(eventType, eventHandler, options){
+        let handlers = this._handlersByType.get(eventType);
+
+        if(!handlers){
+            handlers = new Map();
+            this._handlersByType.set(eventType, handlers);
+        }
+        
+        handlers.set(eventHandler, options);
+    }
+
+    removeEventListener(eventType, handler){
+        const handlers = this._handlersByType.get(eventType)
+
+        if(handlers){
+            handlers.remove(handler);
+        }
+    }
+
+    removeAll(eventType){
+        this._handlersByType.remove(eventType);
+    }
+
+    /**
+     * @param {Event} event
+     */
+    dispatchEvent(event){
+        const handlersForType = this._handlersByType.get(event.type);
+
+        if(handlersForType && handlersForType.size > 0){
+            for(let eventHandler of handlersForType.keys()){
+                const options = handlersForType.get(eventHandler) || {};
+                
+                eventHandler.call(options.scope || this, event);
+
+                if(options.once){
+                    this.removeEventListener(eventHandler)
+                }
+            }    
+        }
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = EventEmitter;
+
+
+/***/ }),
+/* 27 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
 
 
@@ -27166,7 +28003,7 @@ class HabitDetails extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_s
     }
 
     connectedCallback(){
-        
+
         this.isEditable = false;
     }
 
@@ -27209,14 +28046,14 @@ class HabitDetails extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_s
 HabitDetails.define('s-habit-details');
 
 /***/ }),
-/* 26 */
+/* 28 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_Card_js__ = __webpack_require__(12);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(4);
 
 
 
@@ -27278,7 +28115,7 @@ class CreateHabit extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_si
 CreateHabit.define('s-create-habit');
 
 /***/ }),
-/* 27 */
+/* 29 */
 /***/ (function(module, exports) {
 
 class LoadingScreen extends HTMLElement{
@@ -27330,11 +28167,273 @@ class LoadingScreen extends HTMLElement{
 customElements.define('s-loading-screen', LoadingScreen)
 
 /***/ }),
-/* 28 */
+/* 30 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__models_TimeModel_js__ = __webpack_require__(29);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__ = __webpack_require__(31);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__);
+
+
+
+class OnBoarding extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default.a.Component{
+
+    static get template(){
+        return `
+            <style>
+                @import url('./../assets/common-styles.css');
+                :host{
+                    pointer-events: none;
+                    display:block;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    bottom: 0;
+                    right: 0;
+                    padding-top: 30px;
+                }
+                :host(.pointer){
+                    pointer-events:all;
+                }
+                p{
+                    font-family: "Muli";
+                    font-size: 24px;
+                    color: #ab9fd7;
+                    width: 70%;
+                }
+                .bg{
+                    pointer-events: none;
+                }
+                .wrapper{
+                    width: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    text-align:center;  
+                    justify-content: center;
+                    align-items: center;
+                }
+                em{
+                    font-style: normal;
+                    color: #ed74ae;
+                    padding: 0 5px;
+                }
+                .anywhere{
+                    position: absolute;
+                    margin-left: -149px;
+                    margin-top: -66px;
+                }
+                .way-to-go{
+                    position:relative;
+                }
+                .forced{
+                    position:absolute;
+                    top: -60px;
+                    left: 150px;
+                }
+                .touch-it{
+                    margin-top: 110px;
+                    margin-left: 200px;
+                }
+                .dot-wrapper{
+                    position:relative;
+                    margin: 100px auto;
+                    text-align: center;
+                }
+                .dot{
+                    display:inline-block;
+                    background-color: #e386b5;
+                    border-radius: 20px;
+                    width: 30px;
+                    height: 30px;
+                }
+                .center{
+                    text-align:center;
+                }
+                .btn{
+                    padding: 18px 40px; 
+                    font-size: 15px;
+                }
+                .button-wrapper{
+                    position: absolute;
+                    bottom: 30px;
+                    width: 100%;
+                    text-align: center;
+                }
+            </style>
+            <s-view-stack #viewStack default-tab="1">
+                <div class="slide" slot="tabs" 
+                     tab-id="1">
+                    <div class="wrapper">
+                        <p class="bg">Hey there, this is <em>Stow</em> the minimal habit tracker</p>
+                        <p class="bg">To create a habit press and <em>hold</em> anywhere on the screen</p>
+                    </div>
+                    
+                    <div class="dot-wrapper">
+                        <img class="anywhere" src="/assets/anywhere-suggestion.png">
+                        <div class="dot"></div>
+                    </div>
+                </div>
+
+                <div slot="tabs" tab-id="2">
+                    <div class="wrapper">
+                        <p class="bg" style="margin-top: 50px">
+                            <span class="way-to-go">Way to go! <img class="bg forced" src="/assets/forced-enthusiasm.png"></span>
+                        </p>
+                        <p class="bg">Now try <em>selecting</em> your habit</p>
+                    </div>
+                </div>
+
+                <div slot="tabs" tab-id="3">
+                    <div class="wrapper">
+                        <p class="bg">See that <em>checkmark</em>? That means your habit is <em>ready</em> to be checked.</p>
+                        <img class="bg touch-it" src="/assets/touch-it.png">    
+                    </div>
+                </div>
+                <div slot="tabs" 
+                     tab-id="4">
+                    <div class="wrapper">
+                        <p class="bg">See that small blip? Your habit is <em>growing</em>.</p>
+                        <p class="bg">If you don't keep up your <em>daily</em> habits the blips will fade away one by one.</p>
+                        <img class="bg" src="/assets/lonely.png">    
+                    </div>
+                    <div class="button-wrapper">
+                        <button class="btn pink" (click)="this.setSlide(5)">Oh right - gotcha</button>
+                    </div>
+                </div>
+                <div slot="tabs" tab-id="5">
+                    <div class="wrapper">
+                        <p class="bg">Thats it! You’re now a certified <em>Strow</em> expert.</p>
+                        <img class="bg" src="/assets/have-fun.png">    
+                    </div>
+                    <div class="button-wrapper">
+                        <button class="btn pink" (click)="this.end()">Cheers!</button>
+                    </div>
+                </div>
+            </s-view-stack>
+        `;
+    }
+
+    constructor(){
+        super();
+        
+    }
+
+    connectedCallback(){
+        this.style.display = 'none';
+    }
+
+    start(){
+        // fade in bla bla bla
+        this.style.display = '';
+    }
+
+    setSlide(slide){
+        this.$.viewStack.selectTab(slide+'')
+        if(slide > 3){
+            this.classList.toggle('pointer', true);
+        }
+    }
+
+    end(){
+        this.style.display = 'none';
+        this.dispatchEvent(new CustomEvent('complete'));
+    }
+}
+
+
+
+OnBoarding.define('s-onboarding')
+
+/***/ }),
+/* 31 */
+/***/ (function(module, exports) {
+
+class ViewStack extends HTMLElement{
+
+    constructor(){
+        super();
+        this.$ = this.attachShadow({mode: 'open'});
+
+        this.$.innerHTML = `
+            <style>
+                ol{ margin: 0; padding: 0; }
+                .tab.selected{ border-bottom: 2px solid blue; }
+                .tab{
+                    padding: 7px 12px;
+                    background-color: #fff;
+                    border:0;
+                    outline: none;
+                    cursor:pointer;
+                }
+                .tab:hover{
+                    background-color: #ddd;
+                }
+            </style>
+            <section id="tab-content">
+                <slot name="tabs"></slot>
+            </section> 
+        `;
+
+        this.tabHeaderList = this.$.querySelector('#tabs-header-list');
+        this.tabContent = this.$.querySelector('#tab-content');
+        this.contentSlot = this.$.querySelector('#tab-content slot');
+        this.contentSlot.addEventListener('slotchange', _ => {
+            this._getState();
+            console.log('Setitng tab', this._selectedTab)
+            this.selectTab(this._selectedTab);
+        })
+    }
+
+    connectedCallback(){
+        this._getState();
+        this.selectTab(this.getAttribute('default-tab'))
+    }
+
+    _getState(){
+        this._tabs = [];
+        this.contentSlot.assignedNodes().forEach(content => {
+            this._tabs.push({
+                name: content.getAttribute('tab-name'),
+                id: content.getAttribute('tab-id'),
+                content: content
+            })
+        })
+    }
+
+    selectTab(tabId){
+
+        const visibleTab = this._tabs.find(tab => tab.id === tabId)
+        if(!visibleTab)
+            return;
+
+        this._selectedTab = tabId;
+
+        // hide all the other tabs
+        this._tabs.forEach(tab => this._setTabVisibility(tab, false));
+
+        // show the target one
+        this._setTabVisibility(visibleTab, true)
+
+        const e = new Event('selected');
+        e.data = tabId;
+        this.dispatchEvent(e);
+    }
+
+    _setTabVisibility(tab, visible){
+        tab.content.style.display = visible ? '' : 'none';
+    }
+}
+customElements.define('s-view-stack', ViewStack);
+
+
+/***/ }),
+/* 32 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__models_TimeModel_js__ = __webpack_require__(33);
 
 
 class HabitModel{
@@ -27445,7 +28544,7 @@ const habitModel = new HabitModel();
 
 
 /***/ }),
-/* 29 */
+/* 33 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -27463,444 +28562,6 @@ class TimeModel{
     }
 }
 /* harmony export (immutable) */ __webpack_exports__["a"] = TimeModel;
-
-
-/***/ }),
-/* 30 */
-/***/ (function(module, exports, __webpack_require__) {
-
-const path = __webpack_require__(31);
-
-module.exports = {
-    entry: './app/Strow.js',
-    output: {
-        filename: path.join('app', 'strow.bundle.js')
-    },
-    devtool: 'source-map',
-    watch: true
-};
-
-
-
-/***/ }),
-/* 31 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(process) {// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-// resolves . and .. elements in a path array with directory names there
-// must be no slashes, empty elements, or device names (c:\) in the array
-// (so also no leading and trailing slashes - it does not distinguish
-// relative and absolute paths)
-function normalizeArray(parts, allowAboveRoot) {
-  // if the path tries to go above the root, `up` ends up > 0
-  var up = 0;
-  for (var i = parts.length - 1; i >= 0; i--) {
-    var last = parts[i];
-    if (last === '.') {
-      parts.splice(i, 1);
-    } else if (last === '..') {
-      parts.splice(i, 1);
-      up++;
-    } else if (up) {
-      parts.splice(i, 1);
-      up--;
-    }
-  }
-
-  // if the path is allowed to go above the root, restore leading ..s
-  if (allowAboveRoot) {
-    for (; up--; up) {
-      parts.unshift('..');
-    }
-  }
-
-  return parts;
-}
-
-// Split a filename into [root, dir, basename, ext], unix version
-// 'root' is just a slash, or nothing.
-var splitPathRe =
-    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
-var splitPath = function(filename) {
-  return splitPathRe.exec(filename).slice(1);
-};
-
-// path.resolve([from ...], to)
-// posix version
-exports.resolve = function() {
-  var resolvedPath = '',
-      resolvedAbsolute = false;
-
-  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-    var path = (i >= 0) ? arguments[i] : process.cwd();
-
-    // Skip empty and invalid entries
-    if (typeof path !== 'string') {
-      throw new TypeError('Arguments to path.resolve must be strings');
-    } else if (!path) {
-      continue;
-    }
-
-    resolvedPath = path + '/' + resolvedPath;
-    resolvedAbsolute = path.charAt(0) === '/';
-  }
-
-  // At this point the path should be resolved to a full absolute path, but
-  // handle relative paths to be safe (might happen when process.cwd() fails)
-
-  // Normalize the path
-  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
-    return !!p;
-  }), !resolvedAbsolute).join('/');
-
-  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
-};
-
-// path.normalize(path)
-// posix version
-exports.normalize = function(path) {
-  var isAbsolute = exports.isAbsolute(path),
-      trailingSlash = substr(path, -1) === '/';
-
-  // Normalize the path
-  path = normalizeArray(filter(path.split('/'), function(p) {
-    return !!p;
-  }), !isAbsolute).join('/');
-
-  if (!path && !isAbsolute) {
-    path = '.';
-  }
-  if (path && trailingSlash) {
-    path += '/';
-  }
-
-  return (isAbsolute ? '/' : '') + path;
-};
-
-// posix version
-exports.isAbsolute = function(path) {
-  return path.charAt(0) === '/';
-};
-
-// posix version
-exports.join = function() {
-  var paths = Array.prototype.slice.call(arguments, 0);
-  return exports.normalize(filter(paths, function(p, index) {
-    if (typeof p !== 'string') {
-      throw new TypeError('Arguments to path.join must be strings');
-    }
-    return p;
-  }).join('/'));
-};
-
-
-// path.relative(from, to)
-// posix version
-exports.relative = function(from, to) {
-  from = exports.resolve(from).substr(1);
-  to = exports.resolve(to).substr(1);
-
-  function trim(arr) {
-    var start = 0;
-    for (; start < arr.length; start++) {
-      if (arr[start] !== '') break;
-    }
-
-    var end = arr.length - 1;
-    for (; end >= 0; end--) {
-      if (arr[end] !== '') break;
-    }
-
-    if (start > end) return [];
-    return arr.slice(start, end - start + 1);
-  }
-
-  var fromParts = trim(from.split('/'));
-  var toParts = trim(to.split('/'));
-
-  var length = Math.min(fromParts.length, toParts.length);
-  var samePartsLength = length;
-  for (var i = 0; i < length; i++) {
-    if (fromParts[i] !== toParts[i]) {
-      samePartsLength = i;
-      break;
-    }
-  }
-
-  var outputParts = [];
-  for (var i = samePartsLength; i < fromParts.length; i++) {
-    outputParts.push('..');
-  }
-
-  outputParts = outputParts.concat(toParts.slice(samePartsLength));
-
-  return outputParts.join('/');
-};
-
-exports.sep = '/';
-exports.delimiter = ':';
-
-exports.dirname = function(path) {
-  var result = splitPath(path),
-      root = result[0],
-      dir = result[1];
-
-  if (!root && !dir) {
-    // No dirname whatsoever
-    return '.';
-  }
-
-  if (dir) {
-    // It has a dirname, strip trailing slash
-    dir = dir.substr(0, dir.length - 1);
-  }
-
-  return root + dir;
-};
-
-
-exports.basename = function(path, ext) {
-  var f = splitPath(path)[2];
-  // TODO: make this comparison case-insensitive on windows?
-  if (ext && f.substr(-1 * ext.length) === ext) {
-    f = f.substr(0, f.length - ext.length);
-  }
-  return f;
-};
-
-
-exports.extname = function(path) {
-  return splitPath(path)[3];
-};
-
-function filter (xs, f) {
-    if (xs.filter) return xs.filter(f);
-    var res = [];
-    for (var i = 0; i < xs.length; i++) {
-        if (f(xs[i], i, xs)) res.push(xs[i]);
-    }
-    return res;
-}
-
-// String.prototype.substr - negative index don't work in IE8
-var substr = 'ab'.substr(-1) === 'b'
-    ? function (str, start, len) { return str.substr(start, len) }
-    : function (str, start, len) {
-        if (start < 0) start = str.length + start;
-        return str.substr(start, len);
-    }
-;
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(32)))
-
-/***/ }),
-/* 32 */
-/***/ (function(module, exports) {
-
-// shim for using process in browser
-var process = module.exports = {};
-
-// cached from whatever global is present so that test runners that stub it
-// don't break things.  But we need to wrap it in a try catch in case it is
-// wrapped in strict mode code which doesn't define any globals.  It's inside a
-// function because try/catches deoptimize in certain engines.
-
-var cachedSetTimeout;
-var cachedClearTimeout;
-
-function defaultSetTimout() {
-    throw new Error('setTimeout has not been defined');
-}
-function defaultClearTimeout () {
-    throw new Error('clearTimeout has not been defined');
-}
-(function () {
-    try {
-        if (typeof setTimeout === 'function') {
-            cachedSetTimeout = setTimeout;
-        } else {
-            cachedSetTimeout = defaultSetTimout;
-        }
-    } catch (e) {
-        cachedSetTimeout = defaultSetTimout;
-    }
-    try {
-        if (typeof clearTimeout === 'function') {
-            cachedClearTimeout = clearTimeout;
-        } else {
-            cachedClearTimeout = defaultClearTimeout;
-        }
-    } catch (e) {
-        cachedClearTimeout = defaultClearTimeout;
-    }
-} ())
-function runTimeout(fun) {
-    if (cachedSetTimeout === setTimeout) {
-        //normal enviroments in sane situations
-        return setTimeout(fun, 0);
-    }
-    // if setTimeout wasn't available but was latter defined
-    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
-        cachedSetTimeout = setTimeout;
-        return setTimeout(fun, 0);
-    }
-    try {
-        // when when somebody has screwed with setTimeout but no I.E. maddness
-        return cachedSetTimeout(fun, 0);
-    } catch(e){
-        try {
-            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-            return cachedSetTimeout.call(null, fun, 0);
-        } catch(e){
-            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-            return cachedSetTimeout.call(this, fun, 0);
-        }
-    }
-
-
-}
-function runClearTimeout(marker) {
-    if (cachedClearTimeout === clearTimeout) {
-        //normal enviroments in sane situations
-        return clearTimeout(marker);
-    }
-    // if clearTimeout wasn't available but was latter defined
-    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-        cachedClearTimeout = clearTimeout;
-        return clearTimeout(marker);
-    }
-    try {
-        // when when somebody has screwed with setTimeout but no I.E. maddness
-        return cachedClearTimeout(marker);
-    } catch (e){
-        try {
-            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-            return cachedClearTimeout.call(null, marker);
-        } catch (e){
-            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-            return cachedClearTimeout.call(this, marker);
-        }
-    }
-
-
-
-}
-var queue = [];
-var draining = false;
-var currentQueue;
-var queueIndex = -1;
-
-function cleanUpNextTick() {
-    if (!draining || !currentQueue) {
-        return;
-    }
-    draining = false;
-    if (currentQueue.length) {
-        queue = currentQueue.concat(queue);
-    } else {
-        queueIndex = -1;
-    }
-    if (queue.length) {
-        drainQueue();
-    }
-}
-
-function drainQueue() {
-    if (draining) {
-        return;
-    }
-    var timeout = runTimeout(cleanUpNextTick);
-    draining = true;
-
-    var len = queue.length;
-    while(len) {
-        currentQueue = queue;
-        queue = [];
-        while (++queueIndex < len) {
-            if (currentQueue) {
-                currentQueue[queueIndex].run();
-            }
-        }
-        queueIndex = -1;
-        len = queue.length;
-    }
-    currentQueue = null;
-    draining = false;
-    runClearTimeout(timeout);
-}
-
-process.nextTick = function (fun) {
-    var args = new Array(arguments.length - 1);
-    if (arguments.length > 1) {
-        for (var i = 1; i < arguments.length; i++) {
-            args[i - 1] = arguments[i];
-        }
-    }
-    queue.push(new Item(fun, args));
-    if (queue.length === 1 && !draining) {
-        runTimeout(drainQueue);
-    }
-};
-
-// v8 likes predictible objects
-function Item(fun, array) {
-    this.fun = fun;
-    this.array = array;
-}
-Item.prototype.run = function () {
-    this.fun.apply(null, this.array);
-};
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-process.versions = {};
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-process.prependListener = noop;
-process.prependOnceListener = noop;
-
-process.listeners = function (name) { return [] }
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-process.umask = function() { return 0; };
 
 
 /***/ })

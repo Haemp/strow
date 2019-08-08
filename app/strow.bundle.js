@@ -65,36 +65,6 @@
 /************************************************************************/
 /******/ ([
 /* 0 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* unused harmony export NameOrCtorDef */
-/**
- * Copyright 2016 The Incremental DOM Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS-IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-/** @typedef {string|!Function} */
-let NameOrCtorDef;
-
-
-
-
-
-/***/ }),
-/* 1 */
 /***/ (function(module, exports, __webpack_require__) {
 
 const iDOM = __webpack_require__(14);
@@ -257,11 +227,10 @@ function generateTemplateRecusive(curNode){
  */
 function triggerCompiled(){
     return `
-        if(curNode.$shouldWaitForCompile && curNode.$compiled != true){
+        if(curNode.$compiled != true){
             if(curNode.compiledCallback)
                 curNode.compiledCallback();
                 
-            curNode.$shouldWaitForCompile = false;
             curNode.$compiled = true;
         }
     `;
@@ -308,7 +277,6 @@ function closeOpenTag() {
     // if separate
     return `
     curNode = iDOM.elementOpenEnd();
-    curNode.$shouldWaitForCompile = true;
 `;
 }
 
@@ -320,6 +288,9 @@ function applyEach(each, curNode){
     // stamping it - otherwise this will lead to an infinite loop
     curNode.removeAttribute('each');
 
+    // TODO: There is a bug where where events set on an element
+    // inside an each statement will have the data object set as
+    // "this". 
     tmpl += wrapAndThrowError(`
         // generate repeating element
         ${collection}.forEach((${item}) => {
@@ -622,8 +593,12 @@ class Component extends HTMLElement{
             return render(this, this.$shadyDom ? this : this.shadow);
         }
 
+        // wraps the given property in a setter to render
+        // on update
         if(this.props){
             this.props.forEach((prop) => {
+
+                // TODO: throw error if the property already exists
                 Object.defineProperty(this.prototype, prop, {
                     set: function (value) {
                         this['_'+prop] = value;
@@ -643,11 +618,21 @@ class Component extends HTMLElement{
 
         // connectedCallback triggers rendering routine
         this.prototype.connectedCallback = function(){
-            this.render();
 
-            if(!this.$shouldWaitForCompile){
+            this.render();
+            // In the case of this method being called inside of a simply template
+            // we want to wait till the compiled handler to trigger this logic
+
+            // BUT in the case of the simply component being added directly to
+            // the the DOM and not via a simply template we want to trigger it directly
+
+            // When an element is created via iDOM - it puts this flag on the node.
+            // If so - we wait to trigger the connectedCallback till all compilation
+            // is done.
+            if(!this.$iDOMCreated){
                 if(userDefinedCallback)
                     userDefinedCallback.call(this);
+
             }
         }
 
@@ -684,7 +669,6 @@ class Component extends HTMLElement{
     }
 }
 
-
 module.exports = {
     settings,
     define: function(tagName, classDefinition){
@@ -700,313 +684,37 @@ module.exports = {
 
 
 /***/ }),
+/* 1 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* unused harmony export NameOrCtorDef */
+/**
+ * Copyright 2016 The Incremental DOM Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+/** @typedef {string|!Function} */
+let NameOrCtorDef;
+
+
+
+
+
+/***/ }),
 /* 2 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return getData; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return initData; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return importNode; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(4);
-/**
- * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS-IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-
-
-
-/**
- * Keeps track of information needed to perform diffs for a given DOM node.
- * @param {NameOrCtorDef} nameOrCtor
- * @param {?string=} key
- * @param {*=} typeId
- * @constructor
- */
-function NodeData(nameOrCtor, key, typeId) {
-  /**
-   * An array of attribute name/value pairs, used for quickly diffing the
-   * incomming attributes to see if the DOM node's attributes need to be
-   * updated.
-   * @const {Array<*>}
-   */
-  this.attrsArr = [];
-
-  /**
-   * Whether or not the statics have been applied for the node yet.
-   * {boolean}
-   */
-  this.staticsApplied = false;
-
-  /**
-   * The key used to identify this node, used to preserve DOM nodes when they
-   * move within their parent.
-   * @type {?string|undefined}
-   */
-  this.key = key;
-
-  /**
-   * Keeps track of children within this node by their key.
-   * {!Object<string, !Element>}
-   */
-  this.keyMap = Object(__WEBPACK_IMPORTED_MODULE_1__util_js__["a" /* createMap */])();
-
-  /**
-   * Whether or the associated node is, or contains, a focused Element.
-   * @type {boolean}
-   */
-  this.focused = false;
-
-  /**
-   * The nodeName or contructor for the Node.
-   * @const {NameOrCtorDef}
-   */
-  this.nameOrCtor = nameOrCtor;
-
-  /**
-   * @type {?string}
-   */
-  this.text = null;
-
-  /**
-   * @const
-   */
-  this.typeId = typeId;
-}
-
-
-/**
- * Initializes a NodeData object for a Node.
- *
- * @param {Node} node The node to initialize data for.
- * @param {NameOrCtorDef} nameOrCtor The nodeName or constructor for the Node.
- * @param {?string=} key The key that identifies the node.
- * @param {*=} typeId The type identifier for the Node.
- * @return {!NodeData} The newly initialized data object
- */
-const initData = function(node, nameOrCtor, key, typeId) {
-  const data = new NodeData(nameOrCtor, key, typeId);
-  node['__incrementalDOMData'] = data;
-  return data;
-};
-
-
-/**
- * Retrieves the NodeData object for a Node, creating it if necessary.
- *
- * @param {?Node} node The Node to retrieve the data for.
- * @return {!NodeData} The NodeData for this Node.
- */
-const getData = function(node) {
-  importNode(node);
-  return node['__incrementalDOMData'];
-};
-
-
-/**
- * Imports node and its subtree, initializing caches.
- *
- * @param {?Node} node The Node to import.
- */
-const importNode = function(node) {
-  if (node['__incrementalDOMData']) {
-    return;
-  }
-
-  const isElement = node.nodeType === 1;
-  const nodeName = isElement ? node.localName : node.nodeName;
-  const key = isElement ? node.getAttribute('key') : null;
-  const typeId = node['typeId'];
-  const data = initData(node, nodeName, key, typeId);
-
-  if (key) {
-    getData(node.parentNode).keyMap[key] = node;
-  }
-
-  if (isElement) {
-    const attributes = node.attributes;
-    const attrsArr = data.attrsArr;
-
-    for (let i = 0; i < attributes.length; i += 1) {
-      const attr = attributes[i];
-      const name = attr.name;
-      const value = attr.value;
-
-      attrsArr.push(name);
-      attrsArr.push(value);
-    }
-  }
-
-  for (let child = node.firstChild; child; child = child.nextSibling) {
-    importNode(child);
-  }
-};
-
-
-/** */
-
-
-
-/***/ }),
-/* 3 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-const typeToColor = new Map();
-typeToColor.set(undefined, 'gray');
-typeToColor.set(1, 'orange');
-typeToColor.set(2, 'blue');
-typeToColor.set(3, 'pink');
-typeToColor.set(4, 'yellow');
-typeToColor.set(5, 'green');
-typeToColor.set(6, 'teal');
-typeToColor.set(7, 'purple');
-typeToColor.set(8, 'red');
-
-const colorToHex = new Map();
-
-colorToHex.set('gray', '#d2d2d2');
-colorToHex.set('orange', '#f6bf49');
-colorToHex.set('blue', '#6d84e5')
-colorToHex.set('pink', '#e285b7')
-colorToHex.set('yellow', '#f8e89d')
-colorToHex.set('green', '#90ce74')
-colorToHex.set('teal', '#82c7d8')
-colorToHex.set('purple', '#a571d4')
-colorToHex.set('red', '#ef8886')
-
-
-class HabitHelper{
-    static getColorNameForType(type){
-        return typeToColor.get(type);
-    }
-
-    static getColorHex(color){
-        return colorToHex.get(color)
-    }
-}
-/* harmony export (immutable) */ __webpack_exports__["a"] = HabitHelper;
-
-
-/***/ }),
-/* 4 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return createMap; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return has; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return truncateArray; });
-/**
- * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS-IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-/**
- * A cached reference to the hasOwnProperty function.
- */
-const hasOwnProperty = Object.prototype.hasOwnProperty;
-
-
-/**
- * A constructor function that will create blank objects.
- * @constructor
- */
-function Blank() {}
-
-Blank.prototype = Object.create(null);
-
-
-/**
- * Used to prevent property collisions between our "map" and its prototype.
- * @param {!Object<string, *>} map The map to check.
- * @param {string} property The property to check.
- * @return {boolean} Whether map has property.
- */
-const has = function(map, property) {
-  return hasOwnProperty.call(map, property);
-};
-
-
-/**
- * Creates an map object without a prototype.
- * @return {!Object}
- */
-const createMap = function() {
-  return new Blank();
-};
-
-
-/**
- * Truncates an array, removing items up until length.
- * @param {!Array<*>} arr The array to truncate.
- * @param {number} length The new length of the array.
- */
-const truncateArray = function(arr, length) {
-  while (arr.length > length) {
-    arr.pop();
-  }
-};
-
-
-/** */
-
-
-
-
-/***/ }),
-/* 5 */
-/***/ (function(module, exports) {
-
-var g;
-
-// This works in non-strict mode
-g = (function() {
-	return this;
-})();
-
-try {
-	// This works if eval is allowed (see CSP)
-	g = g || Function("return this")() || (1,eval)("this");
-} catch(e) {
-	// This works if the window reference is available
-	if(typeof window === "object")
-		g = window;
-}
-
-// g can still be undefined, but nothing to do about it...
-// We return undefined, instead of nothing here, so it's
-// easier to handle this case. if(!global) { ...}
-
-module.exports = g;
-
-
-/***/ }),
-/* 6 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {var require;var require;(function(f){if(true){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Matter = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return require(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
@@ -11405,7 +11113,313 @@ var Vector = require('../geometry/Vector');
 
 },{"../body/Composite":2,"../core/Common":14,"../core/Events":16,"../geometry/Bounds":26,"../geometry/Vector":28}]},{},[30])(30)
 });
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ }),
+/* 3 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return getData; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return initData; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return importNode; });
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(5);
+/**
+ * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+
+
+
+/**
+ * Keeps track of information needed to perform diffs for a given DOM node.
+ * @param {NameOrCtorDef} nameOrCtor
+ * @param {?string=} key
+ * @param {*=} typeId
+ * @constructor
+ */
+function NodeData(nameOrCtor, key, typeId) {
+  /**
+   * An array of attribute name/value pairs, used for quickly diffing the
+   * incomming attributes to see if the DOM node's attributes need to be
+   * updated.
+   * @const {Array<*>}
+   */
+  this.attrsArr = [];
+
+  /**
+   * Whether or not the statics have been applied for the node yet.
+   * {boolean}
+   */
+  this.staticsApplied = false;
+
+  /**
+   * The key used to identify this node, used to preserve DOM nodes when they
+   * move within their parent.
+   * @type {?string|undefined}
+   */
+  this.key = key;
+
+  /**
+   * Keeps track of children within this node by their key.
+   * {!Object<string, !Element>}
+   */
+  this.keyMap = Object(__WEBPACK_IMPORTED_MODULE_1__util_js__["a" /* createMap */])();
+
+  /**
+   * Whether or the associated node is, or contains, a focused Element.
+   * @type {boolean}
+   */
+  this.focused = false;
+
+  /**
+   * The nodeName or contructor for the Node.
+   * @const {NameOrCtorDef}
+   */
+  this.nameOrCtor = nameOrCtor;
+
+  /**
+   * @type {?string}
+   */
+  this.text = null;
+
+  /**
+   * @const
+   */
+  this.typeId = typeId;
+}
+
+
+/**
+ * Initializes a NodeData object for a Node.
+ *
+ * @param {Node} node The node to initialize data for.
+ * @param {NameOrCtorDef} nameOrCtor The nodeName or constructor for the Node.
+ * @param {?string=} key The key that identifies the node.
+ * @param {*=} typeId The type identifier for the Node.
+ * @return {!NodeData} The newly initialized data object
+ */
+const initData = function(node, nameOrCtor, key, typeId) {
+  const data = new NodeData(nameOrCtor, key, typeId);
+  node['__incrementalDOMData'] = data;
+  return data;
+};
+
+
+/**
+ * Retrieves the NodeData object for a Node, creating it if necessary.
+ *
+ * @param {?Node} node The Node to retrieve the data for.
+ * @return {!NodeData} The NodeData for this Node.
+ */
+const getData = function(node) {
+  importNode(node);
+  return node['__incrementalDOMData'];
+};
+
+
+/**
+ * Imports node and its subtree, initializing caches.
+ *
+ * @param {?Node} node The Node to import.
+ */
+const importNode = function(node) {
+  if (node['__incrementalDOMData']) {
+    return;
+  }
+
+  const isElement = node.nodeType === 1;
+  const nodeName = isElement ? node.localName : node.nodeName;
+  const key = isElement ? node.getAttribute('key') : null;
+  const typeId = node['typeId'];
+  const data = initData(node, nodeName, key, typeId);
+
+  if (key) {
+    getData(node.parentNode).keyMap[key] = node;
+  }
+
+  if (isElement) {
+    const attributes = node.attributes;
+    const attrsArr = data.attrsArr;
+
+    for (let i = 0; i < attributes.length; i += 1) {
+      const attr = attributes[i];
+      const name = attr.name;
+      const value = attr.value;
+
+      attrsArr.push(name);
+      attrsArr.push(value);
+    }
+  }
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    importNode(child);
+  }
+};
+
+
+/** */
+
+
+
+/***/ }),
+/* 4 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+const typeToColor = new Map();
+typeToColor.set(undefined, 'gray');
+typeToColor.set(1, 'orange');
+typeToColor.set(2, 'blue');
+typeToColor.set(3, 'pink');
+typeToColor.set(4, 'yellow');
+typeToColor.set(5, 'green');
+typeToColor.set(6, 'teal');
+typeToColor.set(7, 'purple');
+typeToColor.set(8, 'red');
+
+const colorToHex = new Map();
+
+colorToHex.set('gray', '#d2d2d2');
+colorToHex.set('orange', '#f6bf49');
+colorToHex.set('blue', '#6d84e5')
+colorToHex.set('pink', '#e285b7')
+colorToHex.set('yellow', '#f8e89d')
+colorToHex.set('green', '#90ce74')
+colorToHex.set('teal', '#82c7d8')
+colorToHex.set('purple', '#a571d4')
+colorToHex.set('red', '#ef8886')
+
+
+class HabitHelper{
+    static getColorNameForType(type){
+        return typeToColor.get(type);
+    }
+
+    static getColorHex(color){
+        return colorToHex.get(color)
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = HabitHelper;
+
+
+/***/ }),
+/* 5 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return createMap; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return has; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return truncateArray; });
+/**
+ * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+/**
+ * A cached reference to the hasOwnProperty function.
+ */
+const hasOwnProperty = Object.prototype.hasOwnProperty;
+
+
+/**
+ * A constructor function that will create blank objects.
+ * @constructor
+ */
+function Blank() {}
+
+Blank.prototype = Object.create(null);
+
+
+/**
+ * Used to prevent property collisions between our "map" and its prototype.
+ * @param {!Object<string, *>} map The map to check.
+ * @param {string} property The property to check.
+ * @return {boolean} Whether map has property.
+ */
+const has = function(map, property) {
+  return hasOwnProperty.call(map, property);
+};
+
+
+/**
+ * Creates an map object without a prototype.
+ * @return {!Object}
+ */
+const createMap = function() {
+  return new Blank();
+};
+
+
+/**
+ * Truncates an array, removing items up until length.
+ * @param {!Array<*>} arr The array to truncate.
+ * @param {number} length The new length of the array.
+ */
+const truncateArray = function(arr, length) {
+  while (arr.length > length) {
+    arr.pop();
+  }
+};
+
+
+/** */
+
+
+
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports) {
+
+var g;
+
+// This works in non-strict mode
+g = (function() {
+	return this;
+})();
+
+try {
+	// This works if eval is allowed (see CSP)
+	g = g || Function("return this")() || (1,eval)("this");
+} catch(e) {
+	// This works if the window reference is available
+	if(typeof window === "object")
+		g = window;
+}
+
+// g can still be undefined, but nothing to do about it...
+// We return undefined, instead of nothing here, so it's
+// easier to handle this case. if(!global) { ...}
+
+module.exports = g;
+
 
 /***/ }),
 /* 7 */
@@ -11421,9 +11435,9 @@ var Vector = require('../geometry/Vector');
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return currentPointer; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "g", function() { return skip; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "h", function() { return skipNode; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__nodes_js__ = __webpack_require__(15);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__node_data_js__ = __webpack_require__(3);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__assertions_js__ = __webpack_require__(8);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__dom_util_js__ = __webpack_require__(16);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__global_js__ = __webpack_require__(9);
@@ -11655,6 +11669,11 @@ const alignWithDOM = function(nameOrCtor, key, typeId) {
     }
   }
 
+  // Mark element. This is to be able to determine whether
+  // this element is fully initiated on creation or if there
+  // are still changes coming 
+  node.$iDOMCreated = true;
+
   // Re-order the node into the right position, preserving focus if either
   // node or currentNode are focused by making sure that they are not detached
   // from the DOM.
@@ -11849,7 +11868,7 @@ const skipNode = nextNode;
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "i", function() { return assertPatchOuterHasParentNode; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "k", function() { return setInAttributes; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "l", function() { return setInSkip; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
  *
@@ -12100,7 +12119,7 @@ const global = typeof self !== 'undefined' ? self :
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return applyAttr; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "c", function() { return attributes; });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__symbols_js__ = __webpack_require__(11);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(4);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__util_js__ = __webpack_require__(5);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
  *
@@ -12293,7 +12312,7 @@ const symbols = {
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
 
 
@@ -12451,23 +12470,24 @@ Card.define('f-card');
 
 "use strict";
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js__ = __webpack_require__(18);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__node_modules_howler_dist_howler_js__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__habit_tank_BallTank_js__ = __webpack_require__(19);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__habit_ui_HabitDetails_js__ = __webpack_require__(24);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__habit_ui_HabitDetails_js__ = __webpack_require__(27);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__ui_Card_js__ = __webpack_require__(12);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__habit_ui_CreateHabit_js__ = __webpack_require__(25);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__ = __webpack_require__(26);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__habit_ui_CreateHabit_js__ = __webpack_require__(28);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__ = __webpack_require__(29);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7__onboarding_OnBoarding_js__ = __webpack_require__(32);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__ = __webpack_require__(27);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7__onboarding_OnBoarding_js__ = __webpack_require__(30);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__ = __webpack_require__(32);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__ = __webpack_require__(4);
 
 
 
 // load in webcomponents
+
 
 
 
@@ -12518,21 +12538,26 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
     
     constructor(){
         super();
+
         this.habits = [];
+
         this.HabitHelper = __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__["a" /* default */];
         this._loadSounds();
     }
 
     async connectedCallback(){
+
+        
         this.HabitModel = __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */];
         await __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].loadHabits();
-
+        
         this.$.ballTank.setHabits(__WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].habits);
         this.$.createHabit.type = undefined;
         setTimeout(_ => {
             this.$.loadingScreen.hide();
         }, 500)
-
+        
+        // @inspect
         if(!localStorage.getItem('strive.hasBeenOnboarded')){
             this._onboardingActive = true;
             this.$.onboarding.start()
@@ -12540,12 +12565,19 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         }
     }
 
+    
+    _resetOnboarding(){
+        localStorage.setItem('strive.hasBeenOnboarded', false);
+    }
+    
+    
     onOnboardingComplete(){
         localStorage.setItem('strive.hasBeenOnboarded', true);
     }
 
     onPromptCreate(ball){
         this.$.createHabit.open();
+        
         this._createdBall = ball;
         this._createdSound.play()
     }
@@ -12562,6 +12594,8 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
             this.$.selectedHabit.close();
         }
     }
+
+
 
     async onHabitRemoved(habit){
         this.$.ballTank.removeHabit(habit)
@@ -12598,10 +12632,12 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         // we dont select a habit if in the process
         // of adding one
         if(this._createdBall){
-           return; 
+            return; 
         }
         
         this._selectSound.play();
+        
+        
         this.selectedHabit = habit;
         console.log(this.selectedHabit);
         window.selectedHabit = habit;
@@ -12614,6 +12650,7 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
     }
 
     async onHabitDeSelected(){
+        
         await this.$.selectedHabit.close();
         this.selectedHabit = null;
     }
@@ -12679,7 +12716,7 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "attributes", function() { return __WEBPACK_IMPORTED_MODULE_3__src_attributes_js__["c"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "applyAttr", function() { return __WEBPACK_IMPORTED_MODULE_3__src_attributes_js__["a"]; });
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "applyProp", function() { return __WEBPACK_IMPORTED_MODULE_3__src_attributes_js__["b"]; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__src_node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__src_node_data_js__ = __webpack_require__(3);
 /* harmony reexport (binding) */ __webpack_require__.d(__webpack_exports__, "importNode", function() { return __WEBPACK_IMPORTED_MODULE_4__src_node_data_js__["b"]; });
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
@@ -12711,8 +12748,8 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 "use strict";
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return createElement; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return createText; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_data_js__ = __webpack_require__(3);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
  *
@@ -12931,12 +12968,12 @@ const moveBefore = function(parentNode, node, referenceNode) {
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "b", function() { return elementClose; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "g", function() { return text; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return attr; });
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__types_js__ = __webpack_require__(1);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__core_js__ = __webpack_require__(7);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__attributes_js__ = __webpack_require__(10);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__node_data_js__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__node_data_js__ = __webpack_require__(3);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__assertions_js__ = __webpack_require__(8);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__util_js__ = __webpack_require__(4);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__util_js__ = __webpack_require__(5);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__global_js__ = __webpack_require__(9);
 /**
  * Copyright 2015 The Incremental DOM Authors. All Rights Reserved.
@@ -13238,10 +13275,10 @@ const text = function(value, var_args) {
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
- *  howler.js v2.0.5
+ *  howler.js v2.1.2
  *  howlerjs.com
  *
- *  (c) 2013-2017, James Simpson of GoldFire Studios
+ *  (c) 2013-2019, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -13272,6 +13309,10 @@ const text = function(value, var_args) {
       // Create a global ID counter.
       self._counter = 1000;
 
+      // Pool of unlocked HTML5 Audio objects.
+      self._html5AudioPool = [];
+      self.html5PoolSize = 10;
+
       // Internal properties.
       self._codecs = {};
       self._howls = [];
@@ -13287,8 +13328,8 @@ const text = function(value, var_args) {
       self.autoSuspend = true;
       self.ctx = null;
 
-      // Set to false to disable the auto iOS enabler.
-      self.mobileAutoEnable = true;
+      // Set to false to disable the auto audio unlocker.
+      self.autoUnlock = true;
 
       // Setup the various state values for global tracking.
       self._setup();
@@ -13320,7 +13361,7 @@ const text = function(value, var_args) {
 
         // When using Web Audio, we just need to adjust the master gain.
         if (self.usingWebAudio) {
-          self.masterGain.gain.value = vol;
+          self.masterGain.gain.setValueAtTime(vol, Howler.ctx.currentTime);
         }
 
         // Loop through and change volume for all HTML5 audio nodes.
@@ -13362,7 +13403,7 @@ const text = function(value, var_args) {
 
       // With Web Audio, we just need to mute the master gain.
       if (self.usingWebAudio) {
-        self.masterGain.gain.value = muted ? 0 : self._volume;
+        self.masterGain.gain.setValueAtTime(muted ? 0 : self._volume, Howler.ctx.currentTime);
       }
 
       // Loop through and mute all HTML5 Audio nodes.
@@ -13423,7 +13464,7 @@ const text = function(value, var_args) {
       var self = this || Howler;
 
       // Keeps track of the suspend/resume state of the AudioContext.
-      self.state = self.ctx ? self.ctx.state || 'running' : 'running';
+      self.state = self.ctx ? self.ctx.state || 'suspended' : 'suspended';
 
       // Automatically begin the 30-second suspend process
       self._autoSuspend();
@@ -13509,22 +13550,21 @@ const text = function(value, var_args) {
     },
 
     /**
-     * Mobile browsers will only allow audio to be played after a user interaction.
+     * Some browsers/devices will only allow audio to be played after a user interaction.
      * Attempt to automatically unlock audio on the first user interaction.
      * Concept from: http://paulbakaus.com/tutorials/html5/web-audio-on-ios/
      * @return {Howler}
      */
-    _enableMobileAudio: function() {
+    _unlockAudio: function() {
       var self = this || Howler;
 
-      // Only run this on mobile devices if audio isn't already eanbled.
-      var isMobile = /iPhone|iPad|iPod|Android|BlackBerry|BB10|Silk|Mobi/i.test(self._navigator && self._navigator.userAgent);
-      var isTouch = !!(('ontouchend' in window) || (self._navigator && self._navigator.maxTouchPoints > 0) || (self._navigator && self._navigator.msMaxTouchPoints > 0));
-      if (self._mobileEnabled || !self.ctx || (!isMobile && !isTouch)) {
+      // Only run this if Web Audio is supported and it hasn't already been unlocked.
+      if (self._audioUnlocked || !self.ctx) {
         return;
       }
 
-      self._mobileEnabled = false;
+      self._audioUnlocked = false;
+      self.autoUnlock = false;
 
       // Some mobile devices/platforms have distortion issues when opening/closing tabs and/or web views.
       // Bugs in the browser (especially Mobile Safari) can cause the sampleRate to change from 44100 to 48000.
@@ -13541,9 +13581,48 @@ const text = function(value, var_args) {
       // Call this method on touch start to create and play a buffer,
       // then check if the audio actually played to determine if
       // audio has now been unlocked on iOS, Android, etc.
-      var unlock = function() {
+      var unlock = function(e) {
+        // Create a pool of unlocked HTML5 Audio objects that can
+        // be used for playing sounds without user interaction. HTML5
+        // Audio objects must be individually unlocked, as opposed
+        // to the WebAudio API which only needs a single activation.
+        // This must occur before WebAudio setup or the source.onended
+        // event will not fire.
+        for (var i=0; i<self.html5PoolSize; i++) {
+          try {
+            var audioNode = new Audio();
+
+            // Mark this Audio object as unlocked to ensure it can get returned
+            // to the unlocked pool when released.
+            audioNode._unlocked = true;
+
+            // Add the audio node to the pool.
+            self._releaseHtml5Audio(audioNode);
+          } catch (e) {
+            self.noAudio = true;
+          }
+        }
+
+        // Loop through any assigned audio nodes and unlock them.
+        for (var i=0; i<self._howls.length; i++) {
+          if (!self._howls[i]._webAudio) {
+            // Get all of the sounds in this Howl group.
+            var ids = self._howls[i]._getSoundIds();
+
+            // Loop through all sounds and unlock the audio nodes.
+            for (var j=0; j<ids.length; j++) {
+              var sound = self._howls[i]._soundById(ids[j]);
+
+              if (sound && sound._node && !sound._node._unlocked) {
+                sound._node._unlocked = true;
+                sound._node.load();
+              }
+            }
+          }
+        }
+
         // Fix Android can not play in suspend state.
-        Howler._autoResume();
+        self._autoResume();
 
         // Create an empty buffer.
         var source = self.ctx.createBufferSource();
@@ -13567,18 +13646,63 @@ const text = function(value, var_args) {
           source.disconnect(0);
 
           // Update the unlocked state and prevent this check from happening again.
-          self._mobileEnabled = true;
-          self.mobileAutoEnable = false;
+          self._audioUnlocked = true;
 
           // Remove the touch start listener.
           document.removeEventListener('touchstart', unlock, true);
           document.removeEventListener('touchend', unlock, true);
+          document.removeEventListener('click', unlock, true);
+
+          // Let all sounds know that audio has been unlocked.
+          for (var i=0; i<self._howls.length; i++) {
+            self._howls[i]._emit('unlock');
+          }
         };
       };
 
       // Setup a touch start listener to attempt an unlock in.
       document.addEventListener('touchstart', unlock, true);
       document.addEventListener('touchend', unlock, true);
+      document.addEventListener('click', unlock, true);
+
+      return self;
+    },
+
+    /**
+     * Get an unlocked HTML5 Audio object from the pool. If none are left,
+     * return a new Audio object and throw a warning.
+     * @return {Audio} HTML5 Audio object.
+     */
+    _obtainHtml5Audio: function() {
+      var self = this || Howler;
+
+      // Return the next object from the pool if one exists.
+      if (self._html5AudioPool.length) {
+        return self._html5AudioPool.pop();
+      }
+
+      //.Check if the audio is locked and throw a warning.
+      var testPlay = new Audio().play();
+      if (testPlay && typeof Promise !== 'undefined' && (testPlay instanceof Promise || typeof testPlay.then === 'function')) {
+        testPlay.catch(function() {
+          console.warn('HTML5 Audio pool exhausted, returning potentially locked audio object.');
+        });
+      }
+
+      return new Audio();
+    },
+
+    /**
+     * Return an activated HTML5 Audio object to the pool.
+     * @return {Howler}
+     */
+    _releaseHtml5Audio: function(audio) {
+      var self = this || Howler;
+
+      // Don't add audio to the pool if we don't know if it has been unlocked.
+      if (audio._unlocked) {
+        self._html5AudioPool.push(audio);
+      }
 
       return self;
     },
@@ -13722,6 +13846,7 @@ const text = function(value, var_args) {
       self._sounds = [];
       self._endTimers = {};
       self._queue = [];
+      self._playLock = false;
 
       // Setup event listeners.
       self._onend = o.onend ? [{fn: o.onend}] : [];
@@ -13736,14 +13861,15 @@ const text = function(value, var_args) {
       self._onvolume = o.onvolume ? [{fn: o.onvolume}] : [];
       self._onrate = o.onrate ? [{fn: o.onrate}] : [];
       self._onseek = o.onseek ? [{fn: o.onseek}] : [];
+      self._onunlock = o.onunlock ? [{fn: o.onunlock}] : [];
       self._onresume = [];
 
       // Web Audio or HTML5 Audio?
       self._webAudio = Howler.usingWebAudio && !self._html5;
 
-      // Automatically try to enable audio on iOS.
-      if (typeof Howler.ctx !== 'undefined' && Howler.ctx && Howler.mobileAutoEnable) {
-        Howler._enableMobileAudio();
+      // Automatically try to enable audio.
+      if (typeof Howler.ctx !== 'undefined' && Howler.ctx && Howler.autoUnlock) {
+        Howler._unlockAudio();
       }
 
       // Keep track of this Howl group in the global controller.
@@ -13871,20 +13997,22 @@ const text = function(value, var_args) {
         // Use the default sound sprite (plays the full audio length).
         sprite = '__default';
 
-        // Check if there is a single paused sound that isn't ended.
-        // If there is, play that sound. If not, continue as usual.
-        var num = 0;
-        for (var i=0; i<self._sounds.length; i++) {
-          if (self._sounds[i]._paused && !self._sounds[i]._ended) {
-            num++;
-            id = self._sounds[i]._id;
+        // Check if there is a single paused sound that isn't ended. 
+        // If there is, play that sound. If not, continue as usual.  
+        if (!self._playLock) {
+          var num = 0;
+          for (var i=0; i<self._sounds.length; i++) {
+            if (self._sounds[i]._paused && !self._sounds[i]._ended) {
+              num++;
+              id = self._sounds[i]._id;
+            }
           }
-        }
 
-        if (num === 1) {
-          sprite = null;
-        } else {
-          id = null;
+          if (num === 1) {
+            sprite = null;
+          } else {
+            id = null;
+          }
         }
       }
 
@@ -13908,7 +14036,7 @@ const text = function(value, var_args) {
         // Set the sprite value on this sound.
         sound._sprite = sprite;
 
-        // Makr this sounded as not ended in case another sound is played before this one loads.
+        // Mark this sound as not ended in case another sound is played before this one loads.
         sound._ended = false;
 
         // Add the sound to the queue to be played on load.
@@ -13927,9 +14055,7 @@ const text = function(value, var_args) {
       if (id && !sound._paused) {
         // Trigger the play event, in order to keep iterating through queue.
         if (!internal) {
-          setTimeout(function() {
-            self._emit('play', sound._id);
-          }, 0);
+          self._loadQueue('play');
         }
 
         return sound._id;
@@ -13944,21 +14070,37 @@ const text = function(value, var_args) {
       var seek = Math.max(0, sound._seek > 0 ? sound._seek : self._sprite[sprite][0] / 1000);
       var duration = Math.max(0, ((self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000) - seek);
       var timeout = (duration * 1000) / Math.abs(sound._rate);
-
-      // Update the parameters of the sound
-      sound._paused = false;
-      sound._ended = false;
+      var start = self._sprite[sprite][0] / 1000;
+      var stop = (self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000;
+      var loop = !!(sound._loop || self._sprite[sprite][2]);
       sound._sprite = sprite;
-      sound._seek = seek;
-      sound._start = self._sprite[sprite][0] / 1000;
-      sound._stop = (self._sprite[sprite][0] + self._sprite[sprite][1]) / 1000;
-      sound._loop = !!(sound._loop || self._sprite[sprite][2]);
+
+      // Mark the sound as ended instantly so that this async playback
+      // doesn't get grabbed by another call to play while this one waits to start.
+      sound._ended = false;
+
+      // Update the parameters of the sound.
+      var setParams = function() {
+        sound._paused = false;
+        sound._seek = seek;
+        sound._start = start;
+        sound._stop = stop;
+        sound._loop = loop;
+      };
+
+      // End the sound instantly if seek is at the end.
+      if (seek >= stop) {
+        self._ended(sound);
+        return;
+      }
 
       // Begin the actual playback.
       var node = sound._node;
       if (self._webAudio) {
         // Fire this when the sound is ready to play to begin Web Audio playback.
         var playWebAudio = function() {
+          self._playLock = false;
+          setParams();
           self._refreshBuffer(sound);
 
           // Setup the playback params.
@@ -13981,6 +14123,7 @@ const text = function(value, var_args) {
           if (!internal) {
             setTimeout(function() {
               self._emit('play', sound._id);
+              self._loadQueue();
             }, 0);
           }
         };
@@ -13988,6 +14131,9 @@ const text = function(value, var_args) {
         if (Howler.state === 'running') {
           playWebAudio();
         } else {
+          self._playLock = true;
+
+          // Wait for the audio context to resume before playing.
           self.once('resume', playWebAudio);
 
           // Cancel the end timer.
@@ -14001,35 +14147,85 @@ const text = function(value, var_args) {
           node.volume = sound._volume * Howler.volume();
           node.playbackRate = sound._rate;
 
-          // Mobile browsers will throw an error if this is called without user interaction.
+          // Some browsers will throw an error if this is called without user interaction.
           try {
-            node.play();
+            var play = node.play();
+
+            // Support older browsers that don't support promises, and thus don't have this issue.
+            if (play && typeof Promise !== 'undefined' && (play instanceof Promise || typeof play.then === 'function')) {
+              // Implements a lock to prevent DOMException: The play() request was interrupted by a call to pause().
+              self._playLock = true;
+
+              // Set param values immediately.
+              setParams();
+
+              // Releases the lock and executes queued actions.
+              play
+                .then(function() {
+                  self._playLock = false;
+                  node._unlocked = true;
+                  if (!internal) {
+                    self._emit('play', sound._id);
+                    self._loadQueue();
+                  }
+                })
+                .catch(function() {
+                  self._playLock = false;
+                  self._emit('playerror', sound._id, 'Playback was unable to start. This is most commonly an issue ' +
+                    'on mobile devices and Chrome where playback was not within a user interaction.');
+
+                  // Reset the ended and paused values.
+                  sound._ended = true;
+                  sound._paused = true;
+                });
+            } else if (!internal) {
+              self._playLock = false;
+              setParams();
+              self._emit('play', sound._id);
+              self._loadQueue();
+            }
+
+            // Setting rate before playing won't work in IE, so we set it again here.
+            node.playbackRate = sound._rate;
 
             // If the node is still paused, then we can assume there was a playback issue.
             if (node.paused) {
               self._emit('playerror', sound._id, 'Playback was unable to start. This is most commonly an issue ' +
-                'on mobile devices where playback was not within a user interaction.');
+                'on mobile devices and Chrome where playback was not within a user interaction.');
               return;
             }
 
-            // Setup the new end timer.
-            if (timeout !== Infinity) {
+            // Setup the end timer on sprites or listen for the ended event.
+            if (sprite !== '__default' || sound._loop) {
               self._endTimers[sound._id] = setTimeout(self._ended.bind(self, sound), timeout);
-            }
+            } else {
+              self._endTimers[sound._id] = function() {
+                // Fire ended on this audio node.
+                self._ended(sound);
 
-            if (!internal) {
-              self._emit('play', sound._id);
+                // Clear this listener.
+                node.removeEventListener('ended', self._endTimers[sound._id], false);
+              };
+              node.addEventListener('ended', self._endTimers[sound._id], false);
             }
           } catch (err) {
             self._emit('playerror', sound._id, err);
           }
         };
 
+        // If this is streaming audio, make sure the src is set and load again.
+        if (node.src === 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA') {
+          node.src = self._src;
+          node.load();
+        }
+
         // Play immediately if ready, or wait for the 'canplaythrough'e vent.
         var loadedNoReadyState = (window && window.ejecta) || (!node.readyState && Howler._navigator.isCocoonJS);
-        if (node.readyState === 4 || loadedNoReadyState) {
+        if (node.readyState >= 3 || loadedNoReadyState) {
           playHtml5();
         } else {
+          self._playLock = true;
+
           var listener = function() {
             // Begin playback.
             playHtml5();
@@ -14055,8 +14251,8 @@ const text = function(value, var_args) {
     pause: function(id) {
       var self = this;
 
-      // If the sound hasn't loaded, add it to the load queue to pause when capable.
-      if (self._state !== 'loaded') {
+      // If the sound hasn't loaded or a play() promise is pending, add it to the load queue to pause when capable.
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'pause',
           action: function() {
@@ -14126,7 +14322,7 @@ const text = function(value, var_args) {
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to stop when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'stop',
           action: function() {
@@ -14173,6 +14369,11 @@ const text = function(value, var_args) {
             } else if (!isNaN(sound._node.duration) || sound._node.duration === Infinity) {
               sound._node.currentTime = sound._start || 0;
               sound._node.pause();
+
+              // If this is a live stream, stop download once the audio is stopped.
+              if (sound._node.duration === Infinity) {
+                self._clearSound(sound._node);
+              }
             }
           }
 
@@ -14195,7 +14396,7 @@ const text = function(value, var_args) {
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to mute when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded'|| self._playLock) {
         self._queue.push({
           event: 'mute',
           action: function() {
@@ -14224,6 +14425,11 @@ const text = function(value, var_args) {
 
         if (sound) {
           sound._muted = muted;
+
+          // Cancel active fade and set the volume to the end value.
+          if (sound._interval) {
+            self._stopFade(sound._id);
+          }
 
           if (self._webAudio && sound._node) {
             sound._node.gain.setValueAtTime(muted ? 0 : sound._volume, Howler.ctx.currentTime);
@@ -14273,7 +14479,7 @@ const text = function(value, var_args) {
       var sound;
       if (typeof vol !== 'undefined' && vol >= 0 && vol <= 1) {
         // If the sound hasn't loaded, add it to the load queue to change volume when capable.
-        if (self._state !== 'loaded') {
+        if (self._state !== 'loaded'|| self._playLock) {
           self._queue.push({
             event: 'volume',
             action: function() {
@@ -14332,7 +14538,7 @@ const text = function(value, var_args) {
       var self = this;
 
       // If the sound hasn't loaded, add it to the load queue to fade when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'fade',
           action: function() {
@@ -14342,6 +14548,11 @@ const text = function(value, var_args) {
 
         return self;
       }
+
+      // Make sure the to/from/len values are numbers.
+      from = parseFloat(from);
+      to = parseFloat(to);
+      len = parseFloat(len);
 
       // Set the volume to the start position.
       self.volume(from, id);
@@ -14368,7 +14579,7 @@ const text = function(value, var_args) {
             sound._node.gain.linearRampToValueAtTime(to, end);
           }
 
-          self._startFadeInterval(sound, from, to, len, ids[i]);
+          self._startFadeInterval(sound, from, to, len, ids[i], typeof id === 'undefined');
         }
       }
 
@@ -14382,26 +14593,25 @@ const text = function(value, var_args) {
      * @param  {Number} to   The volume to fade to (0.0 to 1.0).
      * @param  {Number} len  Time in milliseconds to fade.
      * @param  {Number} id   The sound id to fade.
+     * @param  {Boolean} isGroup   If true, set the volume on the group.
      */
-    _startFadeInterval: function(sound, from, to, len, id) {
+    _startFadeInterval: function(sound, from, to, len, id, isGroup) {
       var self = this;
       var vol = from;
-      var dir = from > to ? 'out' : 'in';
-      var diff = Math.abs(from - to);
-      var steps = diff / 0.01;
-      var stepLen = (steps > 0) ? len / steps : len;
+      var diff = to - from;
+      var steps = Math.abs(diff / 0.01);
+      var stepLen = Math.max(4, (steps > 0) ? len / steps : len);
+      var lastTick = Date.now();
 
-      // Since browsers clamp timeouts to 4ms, we need to clamp our steps to that too.
-      if (stepLen < 4) {
-        steps = Math.ceil(steps / (4 / stepLen));
-        stepLen = 4;
-      }
+      // Store the value being faded to.
+      sound._fadeTo = to;
 
+      // Update the volume value on each interval tick.
       sound._interval = setInterval(function() {
-        // Update the volume amount, but only if the volume should change.
-        if (steps > 0) {
-          vol += (dir === 'in' ? 0.01 : -0.01);
-        }
+        // Update the volume based on the time since the last tick.
+        var tick = (Date.now() - lastTick) / len;
+        lastTick = Date.now();
+        vol += diff * tick;
 
         // Make sure the volume is in the right bounds.
         vol = Math.max(0, vol);
@@ -14412,19 +14622,21 @@ const text = function(value, var_args) {
 
         // Change the volume.
         if (self._webAudio) {
-          if (typeof id === 'undefined') {
-            self._volume = vol;
-          }
-
           sound._volume = vol;
         } else {
           self.volume(vol, sound._id, true);
+        }
+
+        // Set the group's volume.
+        if (isGroup) {
+          self._volume = vol;
         }
 
         // When the fade is complete, stop it and fire event.
         if ((to < from && vol <= to) || (to > from && vol >= to)) {
           clearInterval(sound._interval);
           sound._interval = null;
+          sound._fadeTo = null;
           self.volume(to, sound._id);
           self._emit('fade', sound._id);
         }
@@ -14448,6 +14660,8 @@ const text = function(value, var_args) {
 
         clearInterval(sound._interval);
         sound._interval = null;
+        self.volume(sound._fadeTo, id);
+        sound._fadeTo = null;
         self._emit('fade', id);
       }
 
@@ -14540,7 +14754,7 @@ const text = function(value, var_args) {
       var sound;
       if (typeof rate === 'number') {
         // If the sound hasn't loaded, add it to the load queue to change playback rate when capable.
-        if (self._state !== 'loaded') {
+        if (self._state !== 'loaded' || self._playLock) {
           self._queue.push({
             event: 'rate',
             action: function() {
@@ -14565,13 +14779,15 @@ const text = function(value, var_args) {
           if (sound) {
             // Keep track of our position when the rate changed and update the playback
             // start position so we can properly adjust the seek position for time elapsed.
-            sound._rateSeek = self.seek(id[i]);
-            sound._playStart = self._webAudio ? Howler.ctx.currentTime : sound._playStart;
+            if (self.playing(id[i])) {
+              sound._rateSeek = self.seek(id[i]);
+              sound._playStart = self._webAudio ? Howler.ctx.currentTime : sound._playStart;
+            }
             sound._rate = rate;
 
             // Change the playback rate.
             if (self._webAudio && sound._node && sound._node.bufferSource) {
-              sound._node.bufferSource.playbackRate.value = rate;
+              sound._node.bufferSource.playbackRate.setValueAtTime(rate, Howler.ctx.currentTime);
             } else if (sound._node) {
               sound._node.playbackRate = rate;
             }
@@ -14636,7 +14852,7 @@ const text = function(value, var_args) {
       }
 
       // If the sound hasn't loaded, add it to the load queue to seek when capable.
-      if (self._state !== 'loaded') {
+      if (self._state !== 'loaded' || self._playLock) {
         self._queue.push({
           event: 'seek',
           action: function() {
@@ -14663,17 +14879,34 @@ const text = function(value, var_args) {
           sound._ended = false;
           self._clearTimer(id);
 
-          // Restart the playback if the sound was playing.
-          if (playing) {
-            self.play(id, true);
-          }
-
           // Update the seek position for HTML5 Audio.
-          if (!self._webAudio && sound._node) {
+          if (!self._webAudio && sound._node && !isNaN(sound._node.duration)) {
             sound._node.currentTime = seek;
           }
 
-          self._emit('seek', id);
+          // Seek and emit when ready.
+          var seekAndEmit = function() {
+            self._emit('seek', id);
+
+            // Restart the playback if the sound was playing.
+            if (playing) {
+              self.play(id, true);
+            }
+          };
+
+          // Wait for the play lock to be unset before emitting (HTML5 Audio).
+          if (playing && !self._webAudio) {
+            var emitSeek = function() {
+              if (!self._playLock) {
+                seekAndEmit();
+              } else {
+                setTimeout(emitSeek, 0);
+              }
+            };
+            setTimeout(emitSeek, 0);
+          } else {
+            seekAndEmit();
+          }
         } else {
           if (self._webAudio) {
             var realTime = self.playing(id) ? Howler.ctx.currentTime - sound._playStart : 0;
@@ -14756,14 +14989,14 @@ const text = function(value, var_args) {
         // Remove the source or disconnect.
         if (!self._webAudio) {
           // Set the source to 0-second silence to stop any downloading (except in IE).
-          var checkIE = /MSIE |Trident\//.test(Howler._navigator && Howler._navigator.userAgent);
-          if (!checkIE) {
-            sounds[i]._node.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-          }
+          self._clearSound(sounds[i]._node);
 
           // Remove any event listeners.
           sounds[i]._node.removeEventListener('error', sounds[i]._errorFn, false);
           sounds[i]._node.removeEventListener(Howler._canPlayEvent, sounds[i]._loadFn, false);
+
+          // Release the Audio object back to the pool.
+          Howler._releaseHtml5Audio(sounds[i]._node);
         }
 
         // Empty out all of the nodes.
@@ -14771,18 +15004,18 @@ const text = function(value, var_args) {
 
         // Make sure all timers are cleared out.
         self._clearTimer(sounds[i]._id);
+      }
 
-        // Remove the references in the global Howler object.
-        var index = Howler._howls.indexOf(self);
-        if (index >= 0) {
-          Howler._howls.splice(index, 1);
-        }
+      // Remove the references in the global Howler object.
+      var index = Howler._howls.indexOf(self);
+      if (index >= 0) {
+        Howler._howls.splice(index, 1);
       }
 
       // Delete this sound from the cache (if no other Howl is using it).
       var remCache = true;
       for (i=0; i<Howler._howls.length; i++) {
-        if (Howler._howls[i]._src === self._src) {
+        if (Howler._howls[i]._src === self._src || self._src.indexOf(Howler._howls[i]._src) >= 0) {
           remCache = false;
           break;
         }
@@ -14894,6 +15127,7 @@ const text = function(value, var_args) {
 
       // Loop through event store and fire all functions.
       for (var i=events.length-1; i>=0; i--) {
+        // Only fire the listener if the correct ID is used.
         if (!events[i].id || events[i].id === id || event === 'load') {
           setTimeout(function(fn) {
             fn.call(this, id, msg);
@@ -14906,6 +15140,9 @@ const text = function(value, var_args) {
         }
       }
 
+      // Pass the event type into load queue so that it can continue stepping.
+      self._loadQueue(event);
+
       return self;
     },
 
@@ -14915,19 +15152,22 @@ const text = function(value, var_args) {
      * after the previous has finished executing (even if async like play).
      * @return {Howl}
      */
-    _loadQueue: function() {
+    _loadQueue: function(event) {
       var self = this;
 
       if (self._queue.length > 0) {
         var task = self._queue[0];
 
-        // don't move onto the next task until this one is done
-        self.once(task.event, function() {
+        // Remove this task if a matching event was passed.
+        if (task.event === event) {
           self._queue.shift();
           self._loadQueue();
-        });
+        }
 
-        task.action();
+        // Run the task if no event type is passed.
+        if (!event) {
+          task.action();
+        }
       }
 
       return self;
@@ -14945,7 +15185,7 @@ const text = function(value, var_args) {
       // If we are using IE and there was network latency we may be clipping
       // audio before it completes playing. Lets check the node to make sure it
       // believes it has completed, before ending the playback.
-      if (!self._webAudio && sound._node && !sound._node.paused) {
+      if (!self._webAudio && sound._node && !sound._node.paused && !sound._node.ended && sound._node.currentTime < sound._stop) {
         setTimeout(self._ended.bind(self, sound), 100);
         return self;
       }
@@ -14989,7 +15229,7 @@ const text = function(value, var_args) {
 
       // When using a sprite, end the track.
       if (!self._webAudio && !loop) {
-        self.stop(sound._id);
+        self.stop(sound._id, true);
       }
 
       return self;
@@ -15004,7 +15244,16 @@ const text = function(value, var_args) {
       var self = this;
 
       if (self._endTimers[id]) {
-        clearTimeout(self._endTimers[id]);
+        // Clear the timeout or remove the ended listener.
+        if (typeof self._endTimers[id] !== 'function') {
+          clearTimeout(self._endTimers[id]);
+        } else {
+          var sound = self._soundById(id);
+          if (sound && sound._node) {
+            sound._node.removeEventListener('ended', self._endTimers[id], false);
+          }
+        }
+
         delete self._endTimers[id];
       }
 
@@ -15132,9 +15381,9 @@ const text = function(value, var_args) {
       sound._node.bufferSource.loop = sound._loop;
       if (sound._loop) {
         sound._node.bufferSource.loopStart = sound._start || 0;
-        sound._node.bufferSource.loopEnd = sound._stop;
+        sound._node.bufferSource.loopEnd = sound._stop || 0;
       }
-      sound._node.bufferSource.playbackRate.value = sound._rate;
+      sound._node.bufferSource.playbackRate.setValueAtTime(sound._rate, Howler.ctx.currentTime);
 
       return self;
     },
@@ -15146,15 +15395,29 @@ const text = function(value, var_args) {
      */
     _cleanBuffer: function(node) {
       var self = this;
+      var isIOS = Howler._navigator && Howler._navigator.vendor.indexOf('Apple') >= 0;
 
-      if (self._scratchBuffer) {
+      if (Howler._scratchBuffer && node.bufferSource) {
         node.bufferSource.onended = null;
         node.bufferSource.disconnect(0);
-        try { node.bufferSource.buffer = self._scratchBuffer; } catch(e) {}
+        if (isIOS) {
+          try { node.bufferSource.buffer = Howler._scratchBuffer; } catch(e) {}
+        }
       }
       node.bufferSource = null;
 
       return self;
+    },
+
+    /**
+     * Set the source to a 0-second silence to stop any downloading (except in IE).
+     * @param  {Object} node Audio node to clear.
+     */
+    _clearSound: function(node) {
+      var checkIE = /MSIE |Trident\//.test(Howler._navigator && Howler._navigator.userAgent);
+      if (!checkIE) {
+        node.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      }
     }
   };
 
@@ -15216,7 +15479,8 @@ const text = function(value, var_args) {
         self._node.paused = true;
         self._node.connect(Howler.masterGain);
       } else {
-        self._node = new Audio();
+        // Get an unlocked Audio object from the pool.
+        self._node = Howler._obtainHtml5Audio();
 
         // Listen for errors (http://dev.w3.org/html5/spec-author-view/spec.html#mediaerror).
         self._errorFn = self._errorListener.bind(self);
@@ -15382,16 +15646,28 @@ const text = function(value, var_args) {
    * @param  {Howl}        self
    */
   var decodeAudioData = function(arraybuffer, self) {
-    // Decode the buffer into an audio source.
-    Howler.ctx.decodeAudioData(arraybuffer, function(buffer) {
+    // Fire a load error if something broke.
+    var error = function() {
+      self._emit('loaderror', null, 'Decoding audio data failed.');
+    };
+
+    // Load the sound on success.
+    var success = function(buffer) {
       if (buffer && self._sounds.length > 0) {
         cache[self._src] = buffer;
         loadSound(self, buffer);
+      } else {
+        error();
       }
-    }, function() {
-      self._emit('loaderror', null, 'Decoding audio data failed.');
-    });
-  };
+    };
+
+    // Decode the buffer into an audio source.
+    if (typeof Promise !== 'undefined' && Howler.ctx.decodeAudioData.length === 1) {
+      Howler.ctx.decodeAudioData(arraybuffer).then(success).catch(error);
+    } else {
+      Howler.ctx.decodeAudioData(arraybuffer, success, error);
+    }
+  }
 
   /**
    * Sound is now loaded, so finish setting everything up and fire the loaded event.
@@ -15421,6 +15697,11 @@ const text = function(value, var_args) {
    * Setup the audio context when available, or switch to HTML5 Audio mode.
    */
   var setupAudioContext = function() {
+    // If we have already detected that Web Audio isn't supported, don't run this step again.
+    if (!Howler.usingWebAudio) {
+      return;
+    }
+
     // Check if we are using Web Audio and setup the AudioContext if we are.
     try {
       if (typeof AudioContext !== 'undefined') {
@@ -15431,6 +15712,11 @@ const text = function(value, var_args) {
         Howler.usingWebAudio = false;
       }
     } catch(e) {
+      Howler.usingWebAudio = false;
+    }
+
+    // If the audio context creation still failed, set using web audio to false.
+    if (!Howler.ctx) {
       Howler.usingWebAudio = false;
     }
 
@@ -15449,7 +15735,7 @@ const text = function(value, var_args) {
     // Create and expose the master GainNode when using Web Audio (useful for plugins or advanced usage).
     if (Howler.usingWebAudio) {
       Howler.masterGain = (typeof Howler.ctx.createGain === 'undefined') ? Howler.ctx.createGainNode() : Howler.ctx.createGain();
-      Howler.masterGain.gain.value = Howler._muted ? 0 : 1;
+      Howler.masterGain.gain.setValueAtTime(Howler._muted ? 0 : 1, Howler.ctx.currentTime);
       Howler.masterGain.connect(Howler.ctx.destination);
     }
 
@@ -15459,12 +15745,12 @@ const text = function(value, var_args) {
 
   // Add support for AMD (Asynchronous Module Definition) libraries such as require.js.
   if (true) {
-    !(__WEBPACK_AMD_DEFINE_ARRAY__ = [], __WEBPACK_AMD_DEFINE_RESULT__ = function() {
+    !(__WEBPACK_AMD_DEFINE_ARRAY__ = [], __WEBPACK_AMD_DEFINE_RESULT__ = (function() {
       return {
         Howler: Howler,
         Howl: Howl
       };
-    }.apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__),
+    }).apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__),
 				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
   }
 
@@ -15492,10 +15778,10 @@ const text = function(value, var_args) {
 /*!
  *  Spatial Plugin - Adds support for stereo and 3D audio where Web Audio is supported.
  *  
- *  howler.js v2.0.5
+ *  howler.js v2.1.2
  *  howlerjs.com
  *
- *  (c) 2013-2017, James Simpson of GoldFire Studios
+ *  (c) 2013-2019, James Simpson of GoldFire Studios
  *  goldfirestudios.com
  *
  *  MIT License
@@ -15508,7 +15794,7 @@ const text = function(value, var_args) {
   // Setup default properties.
   HowlerGlobal.prototype._pos = [0, 0, 0];
   HowlerGlobal.prototype._orientation = [0, 0, -1, 0, 1, 0];
-  
+
   /** Global Methods **/
   /***************************************************************************/
 
@@ -15556,7 +15842,14 @@ const text = function(value, var_args) {
 
     if (typeof x === 'number') {
       self._pos = [x, y, z];
-      self.ctx.listener.setPosition(self._pos[0], self._pos[1], self._pos[2]);
+
+      if (typeof self.ctx.listener.positionX !== 'undefined') {
+        self.ctx.listener.positionX.setTargetAtTime(self._pos[0], Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.positionY.setTargetAtTime(self._pos[1], Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.positionZ.setTargetAtTime(self._pos[2], Howler.ctx.currentTime, 0.1);
+      } else {
+        self.ctx.listener.setPosition(self._pos[0], self._pos[1], self._pos[2]);
+      }
     } else {
       return self._pos;
     }
@@ -15596,7 +15889,17 @@ const text = function(value, var_args) {
 
     if (typeof x === 'number') {
       self._orientation = [x, y, z, xUp, yUp, zUp];
-      self.ctx.listener.setOrientation(x, y, z, xUp, yUp, zUp);
+
+      if (typeof self.ctx.listener.forwardX !== 'undefined') {
+        self.ctx.listener.forwardX.setTargetAtTime(x, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.forwardY.setTargetAtTime(y, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.forwardZ.setTargetAtTime(z, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upX.setTargetAtTime(x, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upY.setTargetAtTime(y, Howler.ctx.currentTime, 0.1);
+        self.ctx.listener.upZ.setTargetAtTime(z, Howler.ctx.currentTime, 0.1);
+      } else {
+        self.ctx.listener.setOrientation(x, y, z, xUp, yUp, zUp);
+      }
     } else {
       return or;
     }
@@ -15702,9 +16005,15 @@ const text = function(value, var_args) {
             }
 
             if (pannerType === 'spatial') {
-              sound._panner.setPosition(pan, 0, 0);
+              if (typeof sound._panner.positionX !== 'undefined') {
+                sound._panner.positionX.setValueAtTime(pan, Howler.ctx.currentTime);
+                sound._panner.positionY.setValueAtTime(0, Howler.ctx.currentTime);
+                sound._panner.positionZ.setValueAtTime(0, Howler.ctx.currentTime);
+              } else {
+                sound._panner.setPosition(pan, 0, 0);
+              }
             } else {
-              sound._panner.pan.value = pan;
+              sound._panner.pan.setValueAtTime(pan, Howler.ctx.currentTime);
             }
           }
 
@@ -15776,7 +16085,13 @@ const text = function(value, var_args) {
               setupPanner(sound, 'spatial');
             }
 
-            sound._panner.setPosition(x, y, z);
+            if (typeof sound._panner.positionX !== 'undefined') {
+              sound._panner.positionX.setValueAtTime(x, Howler.ctx.currentTime);
+              sound._panner.positionY.setValueAtTime(y, Howler.ctx.currentTime);
+              sound._panner.positionZ.setValueAtTime(z, Howler.ctx.currentTime);
+            } else {
+              sound._panner.setPosition(x, y, z);
+            }
           }
 
           self._emit('pos', sound._id);
@@ -15854,7 +16169,13 @@ const text = function(value, var_args) {
               setupPanner(sound, 'spatial');
             }
 
-            sound._panner.setOrientation(x, y, z);
+            if (typeof sound._panner.orientationX !== 'undefined') {
+              sound._panner.orientationX.setValueAtTime(x, Howler.ctx.currentTime);
+              sound._panner.orientationY.setValueAtTime(y, Howler.ctx.currentTime);
+              sound._panner.orientationZ.setValueAtTime(z, Howler.ctx.currentTime);
+            } else {
+              sound._panner.setOrientation(x, y, z);
+            }
           }
 
           self._emit('orientation', sound._id);
@@ -15894,7 +16215,7 @@ const text = function(value, var_args) {
    *                     with `inverse` and `exponential`.
    *     panningModel - ('HRTF' by default) Determines which spatialization algorithm is used to position audio.
    *                     Can be `HRTF` or `equalpower`.
-   * 
+   *
    * @return {Howl/Object} Returns self or current panner attributes.
    */
   Howl.prototype.pannerAttr = function() {
@@ -16039,8 +16360,21 @@ const text = function(value, var_args) {
 
       // Reset all spatial plugin properties on this sound.
       self._orientation = parent._orientation;
+      self._stereo = parent._stereo;
       self._pos = parent._pos;
       self._pannerAttr = parent._pannerAttr;
+
+      // If a stereo or position was specified, set it up.
+      if (self._stereo) {
+        parent.stereo(self._stereo);
+      } else if (self._pos) {
+        parent.pos(self._pos[0], self._pos[1], self._pos[2], self._id);
+      } else if (self._panner) {
+        // Disconnect the panner.
+        self._panner.disconnect(0);
+        self._panner = undefined;
+        parent._refreshBuffer(self);
+      }
 
       // Complete resetting of the sound.
       return _super.call(this);
@@ -16069,36 +16403,50 @@ const text = function(value, var_args) {
       sound._panner.refDistance = sound._pannerAttr.refDistance;
       sound._panner.rolloffFactor = sound._pannerAttr.rolloffFactor;
       sound._panner.panningModel = sound._pannerAttr.panningModel;
-      sound._panner.setPosition(sound._pos[0], sound._pos[1], sound._pos[2]);
-      sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
+
+      if (typeof sound._panner.positionX !== 'undefined') {
+        sound._panner.positionX.setValueAtTime(sound._pos[0], Howler.ctx.currentTime);
+        sound._panner.positionY.setValueAtTime(sound._pos[1], Howler.ctx.currentTime);
+        sound._panner.positionZ.setValueAtTime(sound._pos[2], Howler.ctx.currentTime);
+      } else {
+        sound._panner.setPosition(sound._pos[0], sound._pos[1], sound._pos[2]);
+      }
+
+      if (typeof sound._panner.orientationX !== 'undefined') {
+        sound._panner.orientationX.setValueAtTime(sound._orientation[0], Howler.ctx.currentTime);
+        sound._panner.orientationY.setValueAtTime(sound._orientation[1], Howler.ctx.currentTime);
+        sound._panner.orientationZ.setValueAtTime(sound._orientation[2], Howler.ctx.currentTime);
+      } else {
+        sound._panner.setOrientation(sound._orientation[0], sound._orientation[1], sound._orientation[2]);
+      }
     } else {
       sound._panner = Howler.ctx.createStereoPanner();
-      sound._panner.pan.value = sound._stereo;
+      sound._panner.pan.setValueAtTime(sound._stereo, Howler.ctx.currentTime);
     }
 
     sound._panner.connect(sound._node);
 
     // Update the connections.
     if (!sound._paused) {
-      sound._parent.pause(sound._id, true).play(sound._id);
+      sound._parent.pause(sound._id, true).play(sound._id, true);
     }
   };
 })();
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
 
 /***/ }),
 /* 19 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__TankWalls_js__ = __webpack_require__(20);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__Ball_js__ = __webpack_require__(21);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__HabitHelper_js__ = __webpack_require__(3);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__CreateAnimator_js__ = __webpack_require__(29);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__TouchState_js__ = __webpack_require__(30);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__HabitHelper_js__ = __webpack_require__(4);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__CreateAnimator_js__ = __webpack_require__(24);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__TouchState_js__ = __webpack_require__(25);
 
 
 
@@ -16119,9 +16467,13 @@ class BallTank extends HTMLElement{
     }
 
     setHabits(habits){
+
         this._habits = habits;
+
         this._renderHabits()
     }
+
+    
 
     associateHabitToCreatedBall(habit){
         this.habitsAndBallsMap.set(habit, this._habitLessBall);
@@ -16146,6 +16498,8 @@ class BallTank extends HTMLElement{
         this.habitsAndBallsMap.delete(habit);
 
         ball.remove();
+
+        this._habits = this._habits.filter(targetHabit => habit !== targetHabit)
     }
 
     cancelCreation(){
@@ -16419,7 +16773,7 @@ customElements.define('s-ball-tank', BallTank);
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
 
 
@@ -16492,15 +16846,16 @@ class TankWalls{
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js__ = __webpack_require__(22);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(4);
 
 
 
 __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.use(__WEBPACK_IMPORTED_MODULE_1__node_modules_matter_attractors_build_matter_attractors_js___default.a);
+
 
 
 class Ball{
@@ -16510,12 +16865,15 @@ class Ball{
         this._world = world;
         this._constraints = [];
         this.tickRadius = 5;
-        this.circleRadius = 20
+        let circleRadius = 20;
+        this.circleRadius = circleRadius
         this._color = color;
         let bodyColor = color;
         if(isDecaying){
             bodyColor = 'gray';
         }
+
+        let scaling = 0.2;
         this.circle = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Bodies.circle(
             x, y-50, 5, 
             {
@@ -16527,8 +16885,8 @@ class Ball{
                 render: {
                     sprite: {
                         texture: './assets/'+bodyColor+'-sprite-r20.png',
-                        yScale: 0.2,
-                        xScale: 0.2,
+                        yScale: scaling,
+                        xScale: scaling,
                     }
                 },
 
@@ -27184,393 +27542,14 @@ var Vector = _dereq_('../geometry/Vector');
 
 },{"../body/Composite":2,"../core/Common":14,"../core/Events":16,"../geometry/Bounds":26,"../geometry/Vector":28}]},{},[30])(30)
 });
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
 
 /***/ }),
 /* 24 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
-
-
-class HabitDetails extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default.a.Component{
-    static get template(){
-        return `
-            <style>
-                @import url('./assets/common-styles.css');
-                @import url('./habit-ui/habit-details.css');
-            </style>
-
-            <div class="{{ this.isEditable ? 'editable layout-container' : 'layout-container' }}">
-                <div class="name-layout-wrapper">
-                    <button if="!this.isEditable" 
-                        class="btn edit"
-                        (click)="this.onEdit()">
-                        <i class="fa fa-pencil"></i>
-                    </button>
-                    <button if="this.isEditable" 
-                            class="btn"
-                            (click)="this.onCancelEdit()">
-                        <i class="fa fa-ban"></i>
-                    </button>
-                    <div if="!this.isEditable" class="name">{{ this.habit.name }}</div>
-                    <input type="text" #nameInput class="name" if="this.isEditable" {value}="{this.habit.name}">
-                </div>
-
-                <div class="input-layout-wrapper">
-                    
-                    <div class="right-bar">
-
-                        <button if="this.isEditable" 
-                                class="btn remove" 
-                                (click)="this.onRemove()">
-                            Remove
-                        </button>
-
-                        <button if="this.isEditable" 
-                                class="btn save" 
-                                (click)="this.onSave()">
-                            Save
-                        </button>
-
-
-                        <button if="this.habit.isTickable && !this.isEditable" 
-                                (click)="this.onTick()" 
-                                class="btn ticker">
-                            <i class="fa fa-check"></i>
-                        </button>
-
-                        <button class="btn streak" if="!this.habit.isTickable && !this.isEditable" class="streak">
-                            <span>{{ this.habit.activeTicks }}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    static get props(){
-        return ['isEditable']
-    }
-
-    get habit(){
-        return this._habit;
-    }
-
-    set habit(habit){
-        this._habit = habit;
-        this.isEditable = false;
-        this.render();
-    }
-
-    connectedCallback(){
-        
-        this.isEditable = false;
-    }
-
-    onEdit(){
-        
-        this.isEditable = true;
-    }
-
-    onSave(){
-
-        this.isEditable = false;
-        this.habit.name = this.$.nameInput.value;
-        this.render();
-
-        
-        this.dispatchEvent(new CustomEvent('updated', {detail: this.habit}));
-    }
-
-    onCancelEdit(){
-        this.classList.toggle('editable', false);
-        this.isEditable = false;
-    }
-
-    onRemove(){
-        this.dispatchEvent(new CustomEvent('removed', {detail: this.habit}));
-    }
-
-    onTick(){
-        this.habit.lastTicked = Date.now();
-        this.habit.isTickable = false;
-        this.habit.isDecaying = false;
-        this.dispatchEvent(new CustomEvent('ticked', {detail: this.habit}))
-        this.render();
-    }
-    
-}
-/* unused harmony export default */
-
-
-HabitDetails.define('s-habit-details');
-
-/***/ }),
-/* 25 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_Card_js__ = __webpack_require__(12);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(3);
-
-
-
-
-class CreateHabit extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default.a.Component{
-
-
-    static get template(){
-        return `
-            <style>
-                @import url('/assets/common-styles.css');
-                @import url('./habit-ui/create-habit.css');
-            </style>
-            <f-card #popup 
-                    hidden
-                    class="{{ this._color }}"
-                    (dismissed)="this.onCancelCreate($evt)"
-                    click-dismiss="true">
-                <div slot="content">
-                    <input #createHabit type="text" placeholder="Name...">
-                </div>
-                <button slot="buttons" 
-                        (click)="this.onCreateHabit($evt)">Create Habit</button>
-            </f-card>
-        `;
-    }
-
-    set type(type){
-        
-       this._type = type;
-       this._color = __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__["a" /* default */].getColorNameForType(type);
-       this.setAttribute('type', this._color);
-       this.render();
-    }
-
-    get type(){
-        return this._type;
-    }
-
-    open(){
-        this.$.popup.open()
-    }
-
-    close(){
-        this.$.popup.close()
-    }
-    
-    onCreateHabit(){
-        const habitName = this.$.createHabit.value;
-        this.dispatchEvent(new CustomEvent('created', {detail: habitName}));
-        this.$.createHabit.value = '';
-    }
-
-    onCancelCreate(){
-        this.dispatchEvent(new CustomEvent('cancel'));
-    }
-}
-
-CreateHabit.define('s-create-habit');
-
-/***/ }),
-/* 26 */
-/***/ (function(module, exports) {
-
-class LoadingScreen extends HTMLElement{
-
-    constructor(){
-        super();
-        this.$ = this.attachShadow({mode: 'open'});
-        
-        this.$.innerHTML = `
-            <style>
-                :host{
-                    transition: opacity 1s ease-in;
-                    background-color: #333;
-                    position:absolute;
-                    bottom: 0;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    background-color: #36324f;
-                    display:flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-                :host(.hidden){
-                    display:none;
-                }
-                :host(.hide){
-                    opacity:0;
-                }
-            </style>
-            <img src="./assets/strow-logo.png">
-        `;
-    }
-
-    hide(){
-        this.classList.toggle('hide', true)
-        setTimeout(_ => {
-            this.classList.toggle('hidden', true);
-        }, 1000)
-    }
-    show(){
-        this.classList.toggle('hidden', false)    
-        setTimeout(_ => {
-            this.classList.toggle('hide', false);
-        })
-    }
-}
-
-customElements.define('s-loading-screen', LoadingScreen)
-
-/***/ }),
-/* 27 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__models_TimeModel_js__ = __webpack_require__(28);
-
-
-class HabitModel{
-
-    constructor(){
-        this.loadHabits();
-    }
-
-    loadHabits(){
-        return new Promise((res, rej) => {
-            const habits = localStorage.getItem('strive.habits')
-            if(habits){
-                try{
-                    this.habits = JSON.parse(habits) 
-                    this.processIsTickable(this.habits);
-                    res();
-                }catch(err){
-                    console.error(err);
-                    this.habits = [];
-                    res()
-                }
-            }else{
-                this.habits = [];
-                res();
-            }
-        })
-    } 
-
-    /** 
-     * Check the habits last ticked timing and see
-     * if we should enable the habit to be ticked or not
-     */
-    processIsTickable(){
-        this.habits.forEach(habit => {
-            const daysSinceTicked = __WEBPACK_IMPORTED_MODULE_0__models_TimeModel_js__["a" /* default */].daysSince(habit.lastTicked);
-            
-            habit.isTickable = daysSinceTicked > 1;
-            habit.isDecaying = daysSinceTicked > 2;
-            
-            if(daysSinceTicked > 1 && daysSinceTicked < 2){
-                habit.timeLeftToTick = 1 - daysSinceTicked;
-            }
-
-            // calculate active ticks
-            if(habit.isDecaying){
-                const adjustedTicks = Math.round(habit.ticks - (daysSinceTicked - 1))
-                habit.activeTicks = adjustedTicks < 0 ? 0 : adjustedTicks;    
-            }
-        })
-    }
-
-    getTypesLeft(){
-        const existingTypes = this.habits.map(habit => habit.type);
-        const availableTypes = [];
-        for(let i = 8; i > 0; i--){
-            if(!existingTypes.includes(i)){
-                availableTypes.push(i);
-            }
-        }
-        return availableTypes;
-    }
-
-    addHabit(name){
-
-        const typesAvailable = this.getTypesLeft();
-        const habit = {
-            name,
-            ticks: 0,
-            activeTicks: 0,
-            lastTicked: Date.now() - 24 * 60 * 60 * 1000, // set as last ticked yesterday to make it active now
-            isDecaying: false,
-            isTickable: true,
-            timeLeftToTick: 1,
-            id: Date.now(),
-            type: typesAvailable[Math.floor(Math.random() * typesAvailable.length)]
-        }
-        this.habits.push(habit);
-        this._save();
-        return habit;
-    }
-
-    getHabits(){
-        return this.habits;
-    }
-
-    remove(habit){
-        return new Promise((res, rej) => {
-            this.habits = this.habits.filter(listHabit => habit !== listHabit)
-            this._save();    
-            res();
-        })
-    }
-
-    removeHabit(targetHabit){
-        this.habits.forEach((key, habit) => {
-            if(targetHabit === habit)
-                this.habits.splice(1, key)
-        })
-    }
-
-    _save(){
-        localStorage.setItem('strive.habits', JSON.stringify(this.habits))
-    }
-}
-
-const habitModel = new HabitModel();
-/* harmony default export */ __webpack_exports__["a"] = (habitModel);
-
-
-/***/ }),
-/* 28 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-class TimeModel{
-
-    static getTime(){
-        return Date.now();
-    }
-
-    static daysSince(timestamp){
-        const now = Date.now();
-        const then = new Date(timestamp || 0).getTime();
-
-        return (now - then) / (24 * 60 * 60 * 1000);
-    }
-}
-/* harmony export (immutable) */ __webpack_exports__["a"] = TimeModel;
-
-
-/***/ }),
-/* 29 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
 
 
@@ -27673,13 +27652,13 @@ class CreateAnimator{
 
 
 /***/ }),
-/* 30 */
+/* 25 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(2);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__ = __webpack_require__(31);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__ = __webpack_require__(26);
 
 
 
@@ -27709,7 +27688,8 @@ class TouchState extends __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__["a" /* d
     constructor(mouseConstraint){
         super();
         this.transitions = new Map();
-        this._state = STATE_NO_ACTION;
+        this._state = STATE_NO_ACTION
+        
         
         this._setupTransitionEvents();
 
@@ -27888,7 +27868,7 @@ class TouchState extends __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__["a" /* d
 
 
 /***/ }),
-/* 31 */
+/* 26 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -27944,13 +27924,256 @@ class EventEmitter{
 
 
 /***/ }),
-/* 32 */
+/* 27 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__ = __webpack_require__(33);
+
+
+class HabitDetails extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default.a.Component{
+    static get template(){
+        return `
+            <style>
+                @import url('./assets/common-styles.css');
+                @import url('./habit-ui/habit-details.css');
+            </style>
+
+            <div class="{{ this.isEditable ? 'editable layout-container' : 'layout-container' }}">
+                <div class="name-layout-wrapper">
+                    <button if="!this.isEditable" 
+                        class="btn edit"
+                        (click)="this.onEdit()">
+                        <i class="fa fa-pencil"></i>
+                    </button>
+                    <button if="this.isEditable" 
+                            class="btn"
+                            (click)="this.onCancelEdit()">
+                        <i class="fa fa-ban"></i>
+                    </button>
+                    <div if="!this.isEditable" class="name">{{ this.habit.name }}</div>
+                    <input type="text" #nameInput class="name" if="this.isEditable" {value}="{this.habit.name}">
+                </div>
+
+                <div class="input-layout-wrapper">
+                    
+                    <div class="right-bar">
+
+                        <button if="this.isEditable" 
+                                class="btn remove" 
+                                (click)="this.onRemove()">
+                            Remove
+                        </button>
+
+                        <button if="this.isEditable" 
+                                class="btn save" 
+                                (click)="this.onSave()">
+                            Save
+                        </button>
+
+
+                        <button if="this.habit.isTickable && !this.isEditable" 
+                                (click)="this.onTick()" 
+                                class="btn ticker">
+                            <i class="fa fa-check"></i>
+                        </button>
+
+                        <button class="btn streak" if="!this.habit.isTickable && !this.isEditable" class="streak">
+                            <span>{{ this.habit.activeTicks }}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    static get props(){
+        return ['isEditable']
+    }
+
+    get habit(){
+        return this._habit;
+    }
+
+    set habit(habit){
+        this._habit = habit;
+        this.isEditable = false;
+        this.render();
+    }
+
+    connectedCallback(){
+
+        this.isEditable = false;
+    }
+
+    onEdit(){
+        
+        this.isEditable = true;
+    }
+
+    onSave(){
+
+        this.isEditable = false;
+        this.habit.name = this.$.nameInput.value;
+        this.render();
+
+        
+        this.dispatchEvent(new CustomEvent('updated', {detail: this.habit}));
+    }
+
+    onCancelEdit(){
+        this.classList.toggle('editable', false);
+        this.isEditable = false;
+    }
+
+    onRemove(){
+        this.dispatchEvent(new CustomEvent('removed', {detail: this.habit}));
+    }
+
+    onTick(){
+        this.habit.lastTicked = Date.now();
+        this.habit.isTickable = false;
+        this.habit.isDecaying = false;
+        this.dispatchEvent(new CustomEvent('ticked', {detail: this.habit}))
+        this.render();
+    }
+    
+}
+/* unused harmony export default */
+
+
+HabitDetails.define('s-habit-details');
+
+/***/ }),
+/* 28 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_Card_js__ = __webpack_require__(12);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__ = __webpack_require__(4);
+
+
+
+
+class CreateHabit extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default.a.Component{
+
+
+    static get template(){
+        return `
+            <style>
+                @import url('/assets/common-styles.css');
+                @import url('./habit-ui/create-habit.css');
+            </style>
+            <f-card #popup 
+                    hidden
+                    class="{{ this._color }}"
+                    (dismissed)="this.onCancelCreate($evt)"
+                    click-dismiss="true">
+                <div slot="content">
+                    <input #createHabit type="text" placeholder="Name...">
+                </div>
+                <button slot="buttons" 
+                        (click)="this.onCreateHabit($evt)">Create Habit</button>
+            </f-card>
+        `;
+    }
+
+    set type(type){
+        
+       this._type = type;
+       this._color = __WEBPACK_IMPORTED_MODULE_2__HabitHelper_js__["a" /* default */].getColorNameForType(type);
+       this.setAttribute('type', this._color);
+       this.render();
+    }
+
+    get type(){
+        return this._type;
+    }
+
+    open(){
+        this.$.popup.open()
+    }
+
+    close(){
+        this.$.popup.close()
+    }
+    
+    onCreateHabit(){
+        const habitName = this.$.createHabit.value;
+        this.dispatchEvent(new CustomEvent('created', {detail: habitName}));
+        this.$.createHabit.value = '';
+    }
+
+    onCancelCreate(){
+        this.dispatchEvent(new CustomEvent('cancel'));
+    }
+}
+
+CreateHabit.define('s-create-habit');
+
+/***/ }),
+/* 29 */
+/***/ (function(module, exports) {
+
+class LoadingScreen extends HTMLElement{
+
+    constructor(){
+        super();
+        this.$ = this.attachShadow({mode: 'open'});
+        
+        this.$.innerHTML = `
+            <style>
+                :host{
+                    transition: opacity 1s ease-in;
+                    background-color: #333;
+                    position:absolute;
+                    bottom: 0;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    background-color: #36324f;
+                    display:flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                :host(.hidden){
+                    display:none;
+                }
+                :host(.hide){
+                    opacity:0;
+                }
+            </style>
+            <img src="./assets/strow-logo.png">
+        `;
+    }
+
+    hide(){
+        this.classList.toggle('hide', true)
+        setTimeout(_ => {
+            this.classList.toggle('hidden', true);
+        }, 1000)
+    }
+    show(){
+        this.classList.toggle('hidden', false)    
+        setTimeout(_ => {
+            this.classList.toggle('hide', false);
+        })
+    }
+}
+
+customElements.define('s-loading-screen', LoadingScreen)
+
+/***/ }),
+/* 30 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(0);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__ = __webpack_require__(31);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__);
 
 
@@ -28001,10 +28224,13 @@ class OnBoarding extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_sim
                     margin-left: -149px;
                     margin-top: -66px;
                 }
+                .way-to-go{
+                    position:relative;
+                }
                 .forced{
                     position:absolute;
-                    top: 20px;
-                    left: 380px;
+                    top: -60px;
+                    left: 150px;
                 }
                 .touch-it{
                     margin-top: 110px;
@@ -28052,10 +28278,11 @@ class OnBoarding extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_sim
 
                 <div slot="tabs" tab-id="2">
                     <div class="wrapper">
-                        <p class="bg" style="margin-top: 50px">Way to go!</p>
+                        <p class="bg" style="margin-top: 50px">
+                            <span class="way-to-go">Way to go! <img class="bg forced" src="/assets/forced-enthusiasm.png"></span>
+                        </p>
                         <p class="bg">Now try <em>selecting</em> your habit</p>
                     </div>
-                    <img class="bg forced" src="/assets/forced-enthusiasm.png">
                 </div>
 
                 <div slot="tabs" tab-id="3">
@@ -28120,7 +28347,7 @@ class OnBoarding extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_sim
 OnBoarding.define('s-onboarding')
 
 /***/ }),
-/* 33 */
+/* 31 */
 /***/ (function(module, exports) {
 
 class ViewStack extends HTMLElement{
@@ -28154,14 +28381,12 @@ class ViewStack extends HTMLElement{
         this.contentSlot = this.$.querySelector('#tab-content slot');
         this.contentSlot.addEventListener('slotchange', _ => {
             this._getState();
+            console.log('Setitng tab', this._selectedTab)
             this.selectTab(this._selectedTab);
         })
     }
 
-
-
-    compiledCallback(){
-
+    connectedCallback(){
         this._getState();
         this.selectTab(this.getAttribute('default-tab'))
     }
@@ -28201,6 +28426,142 @@ class ViewStack extends HTMLElement{
     }
 }
 customElements.define('s-view-stack', ViewStack);
+
+
+/***/ }),
+/* 32 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__models_TimeModel_js__ = __webpack_require__(33);
+
+
+class HabitModel{
+
+    constructor(){
+        this.loadHabits();
+    }
+
+    loadHabits(){
+        return new Promise((res, rej) => {
+            const habits = localStorage.getItem('strive.habits')
+            if(habits){
+                try{
+                    this.habits = JSON.parse(habits) 
+                    this.processIsTickable(this.habits);
+                    res();
+                }catch(err){
+                    console.error(err);
+                    this.habits = [];
+                    res()
+                }
+            }else{
+                this.habits = [];
+                res();
+            }
+        })
+    } 
+
+    /** 
+     * Check the habits last ticked timing and see
+     * if we should enable the habit to be ticked or not
+     */
+    processIsTickable(){
+        this.habits.forEach(habit => {
+            const daysSinceTicked = __WEBPACK_IMPORTED_MODULE_0__models_TimeModel_js__["a" /* default */].daysSince(habit.lastTicked);
+            
+            habit.isTickable = daysSinceTicked > 1;
+            habit.isDecaying = daysSinceTicked > 2;
+            
+            if(daysSinceTicked > 1 && daysSinceTicked < 2){
+                habit.timeLeftToTick = 1 - daysSinceTicked;
+            }
+
+            // calculate active ticks
+            if(habit.isDecaying){
+                const adjustedTicks = Math.round(habit.ticks - (daysSinceTicked - 1))
+                habit.activeTicks = adjustedTicks < 0 ? 0 : adjustedTicks;    
+            }
+        })
+    }
+
+    getTypesLeft(){
+        const existingTypes = this.habits.map(habit => habit.type);
+        const availableTypes = [];
+        for(let i = 8; i > 0; i--){
+            if(!existingTypes.includes(i)){
+                availableTypes.push(i);
+            }
+        }
+        return availableTypes;
+    }
+
+    addHabit(name){
+
+        const typesAvailable = this.getTypesLeft();
+        const habit = {
+            name,
+            ticks: 0,
+            activeTicks: 0,
+            lastTicked: Date.now() - 24 * 60 * 60 * 1000, // set as last ticked yesterday to make it active now
+            isDecaying: false,
+            isTickable: true,
+            timeLeftToTick: 1,
+            id: Date.now(),
+            type: typesAvailable[Math.floor(Math.random() * typesAvailable.length)]
+        }
+        this.habits.push(habit);
+        this._save();
+        return habit;
+    }
+
+    getHabits(){
+        return this.habits;
+    }
+
+    remove(habit){
+        return new Promise((res, rej) => {
+            this.habits = this.habits.filter(listHabit => habit !== listHabit)
+            this._save();    
+            res();
+        })
+    }
+
+    removeHabit(targetHabit){
+        this.habits.forEach((key, habit) => {
+            if(targetHabit === habit)
+                this.habits.splice(1, key)
+        })
+    }
+
+    _save(){
+        localStorage.setItem('strive.habits', JSON.stringify(this.habits))
+    }
+}
+
+const habitModel = new HabitModel();
+/* harmony default export */ __webpack_exports__["a"] = (habitModel);
+
+
+/***/ }),
+/* 33 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+class TimeModel{
+
+    static getTime(){
+        return Date.now();
+    }
+
+    static daysSince(timestamp){
+        const now = Date.now();
+        const then = new Date(timestamp || 0).getTime();
+
+        return (now - then) / (24 * 60 * 60 * 1000);
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = TimeModel;
 
 
 /***/ })
