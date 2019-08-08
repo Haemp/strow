@@ -1,4 +1,4 @@
-class ViewStack extends HTMLElement{
+export default class ViewStack extends HTMLElement{
 
     constructor(){
         super();
@@ -29,7 +29,6 @@ class ViewStack extends HTMLElement{
         this.contentSlot = this.$.querySelector('#tab-content slot');
         this.contentSlot.addEventListener('slotchange', _ => {
             this._getState();
-            console.log('Setitng tab', this._selectedTab)
             this.selectTab(this._selectedTab);
         })
     }

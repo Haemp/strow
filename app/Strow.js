@@ -1,4 +1,4 @@
-import Simply from './../node_modules/simply.js/simply.js';
+import './../node_modules/simply.js/simply.min.js';
 import './../node_modules/howler/dist/howler.js';
 
 // load in webcomponents

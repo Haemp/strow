@@ -1,4 +1,4 @@
-import Matter from './../../node_modules/matter-js/build/matter-dev.js';
+import './../node_modules/matter-js/build/matter-dev.js';
 
 const smallBodySize = 4;
 

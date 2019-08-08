@@ -8,10 +8,8 @@
         <link rel="manifest" href="manifest.json">
         <script>
             if('serviceWorker' in navigator){
-                console.log('Registering SW')
                 navigator.serviceWorker.getRegistrations().then(registrations => {
                     if(registrations.length > 0){
-                        console.log('Updating SW registrations')
                         registrations.forEach(reg => reg.update().then(console.log))    
                     }else{
                         navigator.serviceWorker.register('sw.js')        
@@ -33,6 +31,6 @@
     </head>
     <body>
         <s-strow></s-strow>
-        <script id="bundle" src="./strow.bundle.js"></script>
+        <script type="module" src="./Strow.js"></script>
     </body>
 </html>

@@ -3,6 +3,15 @@
   "version": "1.0.0",
   "description": "Habit Tracking",
   "main": "Strive.js",
+  "scripts": {
+    "watch":"webpack",
+    "watch-dev": "webpack --config=webpack-dev.config.js",
+    "test": "karma start",
+    "dev": "http-server . -p 1337",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:hosting": "firebase deploy --only hosting"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {

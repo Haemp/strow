@@ -1,4 +1,4 @@
-import Matter from './../../node_modules/matter-js/build/matter-dev.js';
+import './../node_modules/matter-js/build/matter-dev.js';
 import EventEmitter from './../EventEmitter.js';
 
 const STATE_NO_ACTION = 'No Action';
@@ -126,54 +126,48 @@ export default class TouchState extends EventEmitter{
     _setupTransitionEvents(){
         
         this.transitions.set(STATE_NO_ACTION + STATE_BODY_TOUCH, _ => {
-            console.log('Body touch');
+            
         })
 
         // this is when we know the touch was not a select
         // but before we know if it's a full longpress 
         this.transitions.set(STATE_NO_ACTION + STATE_FLOOR_TOUCH, _ => {
-            console.log('Floor Touch')
             this.dispatchEvent(new CustomEvent('longpressstart', {detail: this._downPoint}));
         })
 
         // the user lifts his finger before we have a full
         // longpress
         this.transitions.set(STATE_FLOOR_TOUCH + STATE_NO_ACTION, _ => {
-            console.log('Longpress Cancel')
             this.dispatchEvent(new CustomEvent('longpresscancel'));
         })
 
         // user longpresses fully
         this.transitions.set(STATE_FLOOR_TOUCH + STATE_LONGPRESS, _ => {
-            console.log('Longpress')
             this.dispatchEvent(new CustomEvent('longpressend', {detail: this._downPoint}));
             this.state = STATE_NO_ACTION;
         })
 
         this.transitions.set(STATE_LONGPRESS + STATE_NO_ACTION, _ => {
-            console.log('No Action')
         })
 
         this.transitions.set(STATE_BODY_TOUCH + STATE_SELECT, _ => {
-            console.log('Select')
             this.dispatchEvent(new CustomEvent('select', {detail: this._selectedBody.ball}));
             this.state = STATE_NO_ACTION;
             this._selectedBody = null;
         })
 
         this.transitions.set(STATE_BODY_TOUCH + STATE_FLING, _ => {
-            console.log('Fling')
             this.dispatchEvent(new CustomEvent('fling'));
             this.state = STATE_NO_ACTION;
             this._selectedBody = null;
         })
 
         this.transitions.set(STATE_FLING + STATE_NO_ACTION, _ => {
-            console.log('No Action')
+            
         })
 
         this.transitions.set(STATE_SELECT + STATE_NO_ACTION, _ => {
-            console.log('No Action')
+            
         })
     }
 

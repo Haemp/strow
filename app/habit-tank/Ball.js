@@ -1,9 +1,16 @@
-import Matter from './../../node_modules/matter-js/build/matter-dev.js';
-import MatterAttractors from './../../node_modules/matter-attractors/build/matter-attractors.js';
-import HabitHelper from '../HabitHelper.js';
+// Yup this sure looks funky right?
+// the reason we can't do named imports here
+// is that these libraries are not built for
+// native importing. They will not export the
+// usable objects but instead register them 
+// on window.
+/** @global Matter */
+/** @global MatterAttractors */
+import './../node_modules/matter-js/build/matter-dev.js';
+import MatterAttractors from './MatterAttractors.js';
 Matter.use(MatterAttractors);
 
-
+import HabitHelper from '../HabitHelper.js'
 
 export default class Ball{
 
