@@ -5,6 +5,9 @@
   "repository": "https://github.com/Haemp/strow.git",
   "author": "Haemp <hampus@ahlgren.co>",
   "license": "MIT",
+  "scripts":{
+      "release": "node ./scripts/firebase-include-frontend-dependencies; firebase deploy --only hosting"
+  },
   "dependencies": {
     "firebase": "^6.3.4"
   }

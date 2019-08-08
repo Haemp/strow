@@ -16,7 +16,6 @@
   "license": "ISC",
   "dependencies": {
     "howler": "^2.0.5",
-    "matter-attractors": "^0.1.6",
     "matter-js": "^0.13.0",
     "simply.js": "Haemp/simply.js"
   }
