@@ -12395,7 +12395,7 @@ class Card extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js
 
         setTimeout(_ => {
             preventAutoDismiss = false;
-        }, 1000)
+        }, 2000)
         
         this._dismissHandler = function(event){
 
@@ -12461,12 +12461,14 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__habit_ui_CreateHabit_js__ = __webpack_require__(25);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__ = __webpack_require__(26);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_6__LoadingScreen_js__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__ = __webpack_require__(27);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7__onboarding_OnBoarding_js__ = __webpack_require__(32);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__ = __webpack_require__(27);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__ = __webpack_require__(3);
 
 
 
 // load in webcomponents
+
 
 
 
@@ -12483,22 +12485,23 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
                 @import url('./assets/common-styles.css');
                 @import url('./assets/strow.css');
             </style>
-            
-                <s-loading-screen #loadingScreen></s-loading-screen>
-                <s-create-habit #createHabit 
-                                (created)="this.onCreateHabit($evt.detail)" 
-                                (cancel)="this.onCancelCreate($evt)"></s-create-habit>
-                <f-card #selectedHabit 
-                        hidden 
-                        simple 
-                        class="{{ this.HabitHelper.getColorNameForType(this.selectedHabit.type) }}">
-                    <s-habit-details slot="content" 
-                                    {habit}="{this.selectedHabit}" 
-                                    (updated)="this.onHabitUpdated($evt.detail)"
-                                    (removed)="this.onHabitRemoved($evt.detail)"
-                                    (ticked)="this.onHabitTicked($evt.detail)">
-                    </s-habit-details>
-                </f-card>
+            <s-onboarding #onboarding 
+                          (complete)="this.onOnboardingComplete()"></s-onboarding>
+            <s-loading-screen #loadingScreen></s-loading-screen>
+            <s-create-habit #createHabit 
+                            (created)="this.onCreateHabit($evt.detail)" 
+                            (cancel)="this.onCancelCreate($evt)"></s-create-habit>
+            <f-card #selectedHabit 
+                    hidden 
+                    simple 
+                    class="{{ this.HabitHelper.getColorNameForType(this.selectedHabit.type) }}">
+                <s-habit-details slot="content" 
+                                {habit}="{this.selectedHabit}" 
+                                (updated)="this.onHabitUpdated($evt.detail)"
+                                (removed)="this.onHabitRemoved($evt.detail)"
+                                (ticked)="this.onHabitTicked($evt.detail)">
+                </s-habit-details>
+            </f-card>
             
             <s-ball-tank #ballTank 
                          (habitselected)="this.onHabitSelected($evt.detail)" 
@@ -12516,19 +12519,29 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
     constructor(){
         super();
         this.habits = [];
-        this.HabitHelper = __WEBPACK_IMPORTED_MODULE_8__HabitHelper_js__["a" /* default */];
+        this.HabitHelper = __WEBPACK_IMPORTED_MODULE_9__HabitHelper_js__["a" /* default */];
         this._loadSounds();
     }
 
     async connectedCallback(){
-        this.HabitModel = __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */];
-        await __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].loadHabits();
+        this.HabitModel = __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */];
+        await __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].loadHabits();
 
-        this.$.ballTank.setHabits(__WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].habits);
+        this.$.ballTank.setHabits(__WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].habits);
         this.$.createHabit.type = undefined;
         setTimeout(_ => {
             this.$.loadingScreen.hide();
         }, 500)
+
+        if(!localStorage.getItem('strive.hasBeenOnboarded')){
+            this._onboardingActive = true;
+            this.$.onboarding.start()
+            this.$.onboarding.setSlide(1)
+        }
+    }
+
+    onOnboardingComplete(){
+        localStorage.setItem('strive.hasBeenOnboarded', true);
     }
 
     onPromptCreate(ball){
@@ -12541,19 +12554,24 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         this._tickedSound.play();
         habit.ticks++;
         habit.activeTicks++;
-        __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */]._save();
+        __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */]._save();
         this.$.ballTank.setTickForHabit(habit);
+
+        if(this._onboardingActive){
+            this.$.onboarding.setSlide(4);
+            this.$.selectedHabit.close();
+        }
     }
 
     async onHabitRemoved(habit){
         this.$.ballTank.removeHabit(habit)
         this.$.selectedHabit.close();
         this._removedSound.play()
-        await __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].remove(habit);
+        await __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].remove(habit);
     }
 
     onHabitUpdated(habit){
-        __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */]._save();   
+        __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */]._save();   
     }
 
     onCancelCreate(){
@@ -12563,12 +12581,16 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
 
     onCreateHabit(habitName){
         
-        const habit = __WEBPACK_IMPORTED_MODULE_7__HabitModel_js__["a" /* default */].addHabit(habitName);
+        const habit = __WEBPACK_IMPORTED_MODULE_8__HabitModel_js__["a" /* default */].addHabit(habitName);
         this.$.ballTank.associateHabitToCreatedBall(habit);
        
         this.render();
         this._createdBall = null;
         this.$.createHabit.close();
+
+        if(this._onboardingActive){
+            this.$.onboarding.setSlide(2);
+        }
     }
 
     onHabitSelected(habit){
@@ -12585,6 +12607,10 @@ class Strow extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_j
         window.selectedHabit = habit;
         if(this.selectedHabit)
             this.$.selectedHabit.open();
+
+        if(this._onboardingActive){
+            this.$.onboarding.setSlide(3);
+        }
     }
 
     async onHabitDeSelected(){
@@ -16071,6 +16097,10 @@ const text = function(value, var_args) {
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__TankWalls_js__ = __webpack_require__(20);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2__Ball_js__ = __webpack_require__(21);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3__HabitHelper_js__ = __webpack_require__(3);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4__CreateAnimator_js__ = __webpack_require__(29);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5__TouchState_js__ = __webpack_require__(30);
+
+
 
 
 
@@ -16191,6 +16221,7 @@ class BallTank extends HTMLElement{
 
     _setupWorld(){
         this._engine = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Engine.create();
+        this._world = this._engine.world;
 
         // removing gravity
         this._engine.world.gravity.scale = 0;
@@ -16206,7 +16237,7 @@ class BallTank extends HTMLElement{
                 width: window.innerWidth,
                 height: window.innerHeight,
                 wireframes: false,
-                background: '#1b1b33'
+                background: '#3d3a57'
             }
         });
 
@@ -16233,37 +16264,93 @@ class BallTank extends HTMLElement{
 
         this.dispatchEvent(new CustomEvent(BallTank.PROMPT_CREATE,{detail: ball}));   
     }
-
+    
     _setupSelectionBehavior(){
+
+        this._touchState = new __WEBPACK_IMPORTED_MODULE_5__TouchState_js__["a" /* default */](this._mouseConstraint);
+        this._touchState.addEventListener('longpressstart', e => {
+            this._startedLongPress(e.detail);
+            this._deselectHabit();
+        })
+
+        this._touchState.addEventListener('longpresscancel', e => {
+            this._stoppedLongPress()
+        })
+
+        this._touchState.addEventListener('longpressend', e => {
+            this._stoppedLongPress();
+            if(!this._habitLessBall)
+                this._addBall(e.detail.x ,e.detail.y);    
+        })
+
+        this._touchState.addEventListener('select', e => {
+            this._stoppedLongPress();
+            const selectedBall = e.detail;
+
+            // This is protecting for the case
+            // where the user tries to select a ball 
+            // that is not yet saved
+            if(selectedBall.saved){
+                this._selectHabit(this.habitsAndBallsMap.get(selectedBall))
+            }
+        })
+
+    }
+    _setupSelectionBehavior2(){
         let startDrag = false;
         let selectedBall = null;
         const longpressTime = 1000;
         let couldBeLongpress = false;
         const circleDiameter = 15;
         let dragOnGoing = false;
+        this._downPoint = null;
+        let distanceFromDownPoint = 0;
+        let startedLongPress = false;
 
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'mousedown', e => {            
-            
+            console.log(e)
+            this._downPoint = e.mouse.mousedownPosition;
+            console.log('mouse down', e)
             if(dragOnGoing) return;
             
             couldBeLongpress = true;
+            distanceFromDownPoint = 0;
+            setTimeout(_ => {
+                if(distanceFromDownPoint !== false && distanceFromDownPoint < 30){
+                    startedLongPress = true;
+                    this._startedLongPress();
+                }
+            }, 100)
+
             setTimeout(_ => {
                 if(couldBeLongpress){
                     if(!this._habitLessBall){
                         const {x,y} = e.mouse.position;
                         this._addBall(x,y);    
                     }
-
+                    this._stoppedLongPress();
                     couldBeLongpress = false;
                 } 
             }, longpressTime);
         })
     
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'mousemove', e => {
-            
+            console.log('Mouse moving')
+            if(this._downPoint){
+
+                const deltaPosition = {
+                    deltaX: e.mouse.position.x - this._downPoint.x,
+                    deltaY: e.mouse.position.y - this._downPoint.y
+                };
+
+                distanceFromDownPoint = Math.sqrt(
+                    Math.pow(deltaPosition.deltaX, 2) + Math.pow(deltaPosition.deltaY, 2)
+                );
+            }
         })
 
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'startdrag', e => {
+            console.log('start drag', e)
             dragOnGoing = true;
             couldBeLongpress = false;
             startDrag = true;
@@ -16272,8 +16359,14 @@ class BallTank extends HTMLElement{
 
         __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(this._mouseConstraint, 'mouseup', _ => {
             dragOnGoing = false;
+            this._downPoint = null;
+            distanceFromDownPoint = false;
             couldBeLongpress = false;
-            if(startDrag){
+            startedLongPress = false;
+
+            this._stoppedLongPress();
+
+            if(startDrag && selectedBall){
 
                 // This is protecting for the case
                 // where the user tries to select a ball 
@@ -16299,6 +16392,19 @@ class BallTank extends HTMLElement{
         return ball;
     }
 
+    _startedLongPress(point){
+        // create new create animation around the downpoint
+        this._createAnimator = new __WEBPACK_IMPORTED_MODULE_4__CreateAnimator_js__["a" /* default */](this._world, point);
+    }
+
+    _stoppedLongPress(){
+        // when a user interupts the longpress we 
+        // remove the animator and its bodies
+        if(this._createAnimator){
+            this._createAnimator.remove()
+            this._createAnimator = null;
+        }
+    }
 }
 /* unused harmony export default */
 
@@ -27457,6 +27563,644 @@ class TimeModel{
     }
 }
 /* harmony export (immutable) */ __webpack_exports__["a"] = TimeModel;
+
+
+/***/ }),
+/* 29 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
+
+
+const smallBodySize = 4;
+
+class CreateAnimator{
+    constructor(world, downPoint){
+        this._boundingRectWidth = 200;
+        this._smallBodies = [];
+        this._fingerOffset = 50;
+        this._world = world;
+        this._downPoint = downPoint;
+        
+        this._boundingRect = {
+            x: downPoint.x - this._boundingRectWidth/2,
+            y: downPoint.y - this._boundingRectWidth/2,
+            width: this._boundingRectWidth,
+            height: this._boundingRectWidth,
+        };
+        
+        // Create a static point at the downpoint
+        this.gravityPoint = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Bodies.circle(
+            downPoint.x, 
+            downPoint.y - this._fingerOffset, 
+            2,
+            { 
+                isStatic: true,
+                plugin: {
+                  attractors: [
+                      (bodyA, bodyB) => {
+                        if(this._smallBodies.includes(bodyB)){
+                            return {
+                              x: (bodyA.position.x - bodyB.position.x) * 1.8e-6,
+                              y: (bodyA.position.y - bodyB.position.y) * 1.8e-6,
+                            };    
+                        }
+                      }
+                  ]
+                }
+            },
+        );
+
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.World.add(this._world, this.gravityPoint);
+
+        // Create a loop over 2 seconds of small bodies being created
+        // and attracted to the static point
+        this._intervalId = setInterval(_ => {
+            if(this._isRemoved)
+                return clearInterval(this._intervalId);
+
+            this._createSmallBody()
+            if(this._smallBodies.length > 10){
+                clearInterval(this._intervalId);
+            }
+        }, 100)
+    }
+
+    _createSmallBody(){
+        const randomX = Math.random() * this._boundingRect.width + this._boundingRect.x;
+        const randomY = Math.random() * this._boundingRect.width + this._boundingRect.y;
+
+
+        const smallBody = __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Bodies.circle(
+            randomX < 20 ? randomX + 20 : randomX, 
+            randomY < 20 ? randomY + 20 : randomY,
+            smallBodySize,
+            {
+                render:{
+                    fillStyle: '#d8d9d8'
+                }
+            }
+        );
+
+        this._smallBodies.push(smallBody);
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.World.add(this._world, [smallBody]);
+    }
+
+    remove(){
+        this._isRemoved = true;
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Composite.remove(this._world, this.gravityPoint);
+
+        this._smallBodies.forEach(body => {
+            this.animateOut(body)
+        })
+    }
+
+    animateOut(body){
+        const intervalId = setInterval(_ => {
+                
+            if(body.circleRadius < 1){
+                clearInterval(intervalId);
+                __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Composite.remove(this._world, body);
+            }else{
+                __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Body.scale(body, 0.90, 0.90);
+            }
+        }, 16)
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = CreateAnimator;
+
+
+/***/ }),
+/* 30 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__ = __webpack_require__(31);
+
+
+
+const STATE_NO_ACTION = 'No Action';
+const STATE_TOUCH_START = 'Touch Start';
+const STATE_BODY_TOUCH = 'Body Touch';
+const STATE_SELECT = 'Select';
+const STATE_FLING = 'Fling';
+const STATE_FLOOR_TOUCH = 'Floor Touch';
+const STATE_LONGPRESS = 'Longpress';
+const STATE_FINISHED = 'Finished';
+
+const LONG_PRESS_TIME = 1500;
+
+// the min distance a user can drag 
+// before its not counted as a longpress
+const MAX_LONGPRESS_TRAVEL = 50;
+
+// the min distance a user can drag 
+// before its not counted as a select
+const MAX_SELECT_TRAVEL = 50; 
+
+
+
+class TouchState extends __WEBPACK_IMPORTED_MODULE_1__EventEmitter_js__["a" /* default */]{
+
+    constructor(mouseConstraint){
+        super();
+        this.transitions = new Map();
+        this._state = STATE_NO_ACTION;
+        
+        this._setupTransitionEvents();
+
+        this._downPoint = {};
+        this._travelPoint = {};
+        let travelDistance = null;
+        let clearTimeoutId = 0;
+        
+
+        // If we hear a startdrag it means that the click
+        // was on top of a body. This means we can discard this action
+        // as a longpress.
+        // startdrag triggers BEFORE mousedown
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'startdrag', e => {
+            
+            if(this.state === STATE_FLOOR_TOUCH)
+                return;
+
+            this.state = STATE_BODY_TOUCH;
+            this._selectedBody = e.body;
+        })
+
+        // We get this event in both the body touch and the floor
+        // touch case 
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'mousedown', e => {
+
+            this._downPoint = {
+                x: e.mouse.position.x, 
+                y: e.mouse.position.y
+            };
+
+            // if we're already in a state of body touch
+            // we just ignore this event
+            if(this.state !== STATE_BODY_TOUCH){
+                this.state = STATE_FLOOR_TOUCH;
+
+                this._clearTimeoutId = setTimeout(_ => {
+
+                    // If the user touches the floor and drags the finger
+                    // we don't want to count it as a longpress - most likely
+                    // it was an attempted fling
+                    if(this.getDistance(this._downPoint, this._travelPoint) < MAX_LONGPRESS_TRAVEL){
+                        this.state = STATE_LONGPRESS;
+                    }else{
+                        this.state = STATE_NO_ACTION;
+                    }
+
+
+                    
+                }, LONG_PRESS_TIME)
+            }
+        })
+
+        // Next if we hear a mouse move we need to register
+        // the delta for the last mousemove
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'mousemove', e => {
+
+            // just register the last mouse position
+            // to be evaluated for fling or select
+            this._travelPoint = e.mouse.position;
+
+            // if we travel too far in the longpress we immediately 
+            // cancel the longpress
+            if(this.state === STATE_FLOOR_TOUCH && this.getDistance(this._downPoint, this._travelPoint) > MAX_LONGPRESS_TRAVEL){
+                this._clearTimeout(this._clearTimeoutId);
+
+                this.state = STATE_NO_ACTION;
+            }
+        });
+
+        __WEBPACK_IMPORTED_MODULE_0__node_modules_matter_js_build_matter_dev_js___default.a.Events.on(mouseConstraint, 'mouseup', e => {
+            
+            // timeout is always cleared on mouse up
+            // this works even if there where none set
+            if(this._clearTimeoutId){
+                this._clearTimeout(clearTimeoutId);
+                this.state = STATE_NO_ACTION;    
+            }
+
+            if(this.state === STATE_BODY_TOUCH){
+                if(this.getDistance(this._downPoint, this._travelPoint) > MAX_SELECT_TRAVEL){
+                    this.state = STATE_FLING;
+                }else{
+                    this.state = STATE_SELECT;
+                }
+            }
+        });
+    }
+
+    _clearTimeout(){
+        clearTimeout(this._clearTimeoutId)
+        this._clearTimeoutId = 0;
+    }
+
+    _setupTransitionEvents(){
+        
+        this.transitions.set(STATE_NO_ACTION + STATE_BODY_TOUCH, _ => {
+            console.log('Body touch');
+        })
+
+        // this is when we know the touch was not a select
+        // but before we know if it's a full longpress 
+        this.transitions.set(STATE_NO_ACTION + STATE_FLOOR_TOUCH, _ => {
+            console.log('Floor Touch')
+            this.dispatchEvent(new CustomEvent('longpressstart', {detail: this._downPoint}));
+        })
+
+        // the user lifts his finger before we have a full
+        // longpress
+        this.transitions.set(STATE_FLOOR_TOUCH + STATE_NO_ACTION, _ => {
+            console.log('Longpress Cancel')
+            this.dispatchEvent(new CustomEvent('longpresscancel'));
+        })
+
+        // user longpresses fully
+        this.transitions.set(STATE_FLOOR_TOUCH + STATE_LONGPRESS, _ => {
+            console.log('Longpress')
+            this.dispatchEvent(new CustomEvent('longpressend', {detail: this._downPoint}));
+            this.state = STATE_NO_ACTION;
+        })
+
+        this.transitions.set(STATE_LONGPRESS + STATE_NO_ACTION, _ => {
+            console.log('No Action')
+        })
+
+        this.transitions.set(STATE_BODY_TOUCH + STATE_SELECT, _ => {
+            console.log('Select')
+            this.dispatchEvent(new CustomEvent('select', {detail: this._selectedBody.ball}));
+            this.state = STATE_NO_ACTION;
+            this._selectedBody = null;
+        })
+
+        this.transitions.set(STATE_BODY_TOUCH + STATE_FLING, _ => {
+            console.log('Fling')
+            this.dispatchEvent(new CustomEvent('fling'));
+            this.state = STATE_NO_ACTION;
+            this._selectedBody = null;
+        })
+
+        this.transitions.set(STATE_FLING + STATE_NO_ACTION, _ => {
+            console.log('No Action')
+        })
+
+        this.transitions.set(STATE_SELECT + STATE_NO_ACTION, _ => {
+            console.log('No Action')
+        })
+    }
+
+    set state(newState){
+        const oldState = this._state;
+        this._state = newState;
+        
+        const transitionHandler = this.transitions.get(oldState+newState);
+        if(transitionHandler)
+            transitionHandler.call();
+    }
+
+    get state(){
+        return this._state;
+    }
+
+    getDistance(pointA, pointB){
+
+        const deltaPosition = {
+            deltaX: pointA.x - pointB.x,
+            deltaY: pointA.y - pointB.y
+        };
+
+        // good old highschool geometry finally put to good use!
+        return Math.sqrt(
+            Math.pow(deltaPosition.deltaX, 2) + Math.pow(deltaPosition.deltaY, 2)
+        );
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = TouchState;
+
+
+/***/ }),
+/* 31 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+class EventEmitter{
+
+    constructor(){
+        this._handlersByType = new Map();
+    }
+
+    addEventListener(eventType, eventHandler, options){
+        let handlers = this._handlersByType.get(eventType);
+
+        if(!handlers){
+            handlers = new Map();
+            this._handlersByType.set(eventType, handlers);
+        }
+        
+        handlers.set(eventHandler, options);
+    }
+
+    removeEventListener(eventType, handler){
+        const handlers = this._handlersByType.get(eventType)
+
+        if(handlers){
+            handlers.remove(handler);
+        }
+    }
+
+    removeAll(eventType){
+        this._handlersByType.remove(eventType);
+    }
+
+    /**
+     * @param {Event} event
+     */
+    dispatchEvent(event){
+        const handlersForType = this._handlersByType.get(event.type);
+
+        if(handlersForType && handlersForType.size > 0){
+            for(let eventHandler of handlersForType.keys()){
+                const options = handlersForType.get(eventHandler) || {};
+                
+                eventHandler.call(options.scope || this, event);
+
+                if(options.once){
+                    this.removeEventListener(eventHandler)
+                }
+            }    
+        }
+    }
+}
+/* harmony export (immutable) */ __webpack_exports__["a"] = EventEmitter;
+
+
+/***/ }),
+/* 32 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__ = __webpack_require__(33);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1__ui_ViewStack_js__);
+
+
+
+class OnBoarding extends __WEBPACK_IMPORTED_MODULE_0__node_modules_simply_js_simply_js___default.a.Component{
+
+    static get template(){
+        return `
+            <style>
+                @import url('./../assets/common-styles.css');
+                :host{
+                    pointer-events: none;
+                    display:block;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    bottom: 0;
+                    right: 0;
+                    padding-top: 30px;
+                }
+                :host(.pointer){
+                    pointer-events:all;
+                }
+                p{
+                    font-family: "Muli";
+                    font-size: 24px;
+                    color: #ab9fd7;
+                    width: 70%;
+                }
+                .bg{
+                    pointer-events: none;
+                }
+                .wrapper{
+                    width: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    text-align:center;  
+                    justify-content: center;
+                    align-items: center;
+                }
+                em{
+                    font-style: normal;
+                    color: #ed74ae;
+                    padding: 0 5px;
+                }
+                .anywhere{
+                    position: absolute;
+                    margin-left: -149px;
+                    margin-top: -66px;
+                }
+                .forced{
+                    position:absolute;
+                    top: 20px;
+                    left: 380px;
+                }
+                .touch-it{
+                    margin-top: 110px;
+                    margin-left: 200px;
+                }
+                .dot-wrapper{
+                    position:relative;
+                    margin: 100px auto;
+                    text-align: center;
+                }
+                .dot{
+                    display:inline-block;
+                    background-color: #e386b5;
+                    border-radius: 20px;
+                    width: 30px;
+                    height: 30px;
+                }
+                .center{
+                    text-align:center;
+                }
+                .btn{
+                    padding: 18px 40px; 
+                    font-size: 15px;
+                }
+                .button-wrapper{
+                    position: absolute;
+                    bottom: 30px;
+                    width: 100%;
+                    text-align: center;
+                }
+            </style>
+            <s-view-stack #viewStack default-tab="1">
+                <div class="slide" slot="tabs" 
+                     tab-id="1">
+                    <div class="wrapper">
+                        <p class="bg">Hey there, this is <em>Stow</em> the minimal habit tracker</p>
+                        <p class="bg">To create a habit press and <em>hold</em> anywhere on the screen</p>
+                    </div>
+                    
+                    <div class="dot-wrapper">
+                        <img class="anywhere" src="/assets/anywhere-suggestion.png">
+                        <div class="dot"></div>
+                    </div>
+                </div>
+
+                <div slot="tabs" tab-id="2">
+                    <div class="wrapper">
+                        <p class="bg" style="margin-top: 50px">Way to go!</p>
+                        <p class="bg">Now try <em>selecting</em> your habit</p>
+                    </div>
+                    <img class="bg forced" src="/assets/forced-enthusiasm.png">
+                </div>
+
+                <div slot="tabs" tab-id="3">
+                    <div class="wrapper">
+                        <p class="bg">See that <em>checkmark</em>? That means your habit is <em>ready</em> to be checked.</p>
+                        <img class="bg touch-it" src="/assets/touch-it.png">    
+                    </div>
+                </div>
+                <div slot="tabs" 
+                     tab-id="4">
+                    <div class="wrapper">
+                        <p class="bg">See that small blip? Your habit is <em>growing</em>.</p>
+                        <p class="bg">If you don't keep up your <em>daily</em> habits the blips will fade away one by one.</p>
+                        <img class="bg" src="/assets/lonely.png">    
+                    </div>
+                    <div class="button-wrapper">
+                        <button class="btn pink" (click)="this.setSlide(5)">Oh right - gotcha</button>
+                    </div>
+                </div>
+                <div slot="tabs" tab-id="5">
+                    <div class="wrapper">
+                        <p class="bg">Thats it! You’re now a certified <em>Strow</em> expert.</p>
+                        <img class="bg" src="/assets/have-fun.png">    
+                    </div>
+                    <div class="button-wrapper">
+                        <button class="btn pink" (click)="this.end()">Cheers!</button>
+                    </div>
+                </div>
+            </s-view-stack>
+        `;
+    }
+
+    constructor(){
+        super();
+        
+    }
+
+    connectedCallback(){
+        this.style.display = 'none';
+    }
+
+    start(){
+        // fade in bla bla bla
+        this.style.display = '';
+    }
+
+    setSlide(slide){
+        this.$.viewStack.selectTab(slide+'')
+        if(slide > 3){
+            this.classList.toggle('pointer', true);
+        }
+    }
+
+    end(){
+        this.style.display = 'none';
+        this.dispatchEvent(new CustomEvent('complete'));
+    }
+}
+
+
+
+OnBoarding.define('s-onboarding')
+
+/***/ }),
+/* 33 */
+/***/ (function(module, exports) {
+
+class ViewStack extends HTMLElement{
+
+    constructor(){
+        super();
+        this.$ = this.attachShadow({mode: 'open'});
+
+        this.$.innerHTML = `
+            <style>
+                ol{ margin: 0; padding: 0; }
+                .tab.selected{ border-bottom: 2px solid blue; }
+                .tab{
+                    padding: 7px 12px;
+                    background-color: #fff;
+                    border:0;
+                    outline: none;
+                    cursor:pointer;
+                }
+                .tab:hover{
+                    background-color: #ddd;
+                }
+            </style>
+            <section id="tab-content">
+                <slot name="tabs"></slot>
+            </section> 
+        `;
+
+        this.tabHeaderList = this.$.querySelector('#tabs-header-list');
+        this.tabContent = this.$.querySelector('#tab-content');
+        this.contentSlot = this.$.querySelector('#tab-content slot');
+        this.contentSlot.addEventListener('slotchange', _ => {
+            this._getState();
+            this.selectTab(this._selectedTab);
+        })
+    }
+
+
+
+    compiledCallback(){
+
+        this._getState();
+        this.selectTab(this.getAttribute('default-tab'))
+    }
+
+    _getState(){
+        this._tabs = [];
+        this.contentSlot.assignedNodes().forEach(content => {
+            this._tabs.push({
+                name: content.getAttribute('tab-name'),
+                id: content.getAttribute('tab-id'),
+                content: content
+            })
+        })
+    }
+
+    selectTab(tabId){
+
+        const visibleTab = this._tabs.find(tab => tab.id === tabId)
+        if(!visibleTab)
+            return;
+
+        this._selectedTab = tabId;
+
+        // hide all the other tabs
+        this._tabs.forEach(tab => this._setTabVisibility(tab, false));
+
+        // show the target one
+        this._setTabVisibility(visibleTab, true)
+
+        const e = new Event('selected');
+        e.data = tabId;
+        this.dispatchEvent(e);
+    }
+
+    _setTabVisibility(tab, visible){
+        tab.content.style.display = visible ? '' : 'none';
+    }
+}
+customElements.define('s-view-stack', ViewStack);
 
 
 /***/ })

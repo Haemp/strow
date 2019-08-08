@@ -9,7 +9,14 @@
         <script>
             if('serviceWorker' in navigator){
                 console.log('Registering SW')
-                navigator.serviceWorker.register('sw.js')
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    if(registrations.length > 0){
+                        console.log('Updating SW registrations')
+                        registrations.forEach(reg => reg.update().then(console.log))    
+                    }else{
+                        navigator.serviceWorker.register('sw.js')        
+                    }
+                })
             }
         </script>
         <title>Strow - Visual Habits</title>

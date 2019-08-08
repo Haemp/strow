@@ -26,7 +26,7 @@ export class Checkbox extends HTMLElement{
             this._toggleState()
         })
 
-        this._render()
+        this._render();
     }
 
     set checked(value){

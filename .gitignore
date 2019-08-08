@@ -1,3 +1,4 @@
 node_modules
-.idea/*
-mobile/*
+.idea
+mobile
+build

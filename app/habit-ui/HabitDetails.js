@@ -71,7 +71,7 @@ export default class HabitDetails extends Simply.Component{
     }
 
     connectedCallback(){
-        
+
         this.isEditable = false;
     }
 

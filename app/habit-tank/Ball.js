@@ -4,6 +4,7 @@ import HabitHelper from '../HabitHelper.js';
 Matter.use(MatterAttractors);
 
 
+
 export default class Ball{
 
     constructor(world, x, y, color, isDecaying){
@@ -11,12 +12,15 @@ export default class Ball{
         this._world = world;
         this._constraints = [];
         this.tickRadius = 5;
-        this.circleRadius = 20
+        let circleRadius = 20;
+        this.circleRadius = circleRadius
         this._color = color;
         let bodyColor = color;
         if(isDecaying){
             bodyColor = 'gray';
         }
+
+        let scaling = 0.2;
         this.circle = Matter.Bodies.circle(
             x, y-50, 5, 
             {
@@ -28,8 +32,8 @@ export default class Ball{
                 render: {
                     sprite: {
                         texture: './assets/'+bodyColor+'-sprite-r20.png',
-                        yScale: 0.2,
-                        xScale: 0.2,
+                        yScale: scaling,
+                        xScale: scaling,
                     }
                 },
 

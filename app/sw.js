@@ -1,22 +1,6 @@
 importScripts('workbox-sw.prod.v2.1.0.js');
-console.log('Running SW')
-/**
- * DO NOT EDIT THE FILE MANIFEST ENTRY
- *
- * The method precache() does the following:
- * 1. Cache URLs in the manifest to a local cache.
- * 2. When a network request is made for any of these URLs the response
- *    will ALWAYS comes from the cache, NEVER the network.
- * 3. When the service worker changes ONLY assets with a revision change are
- *    updated, old cache entries are left as is.
- *
- * By changing the file manifest manually, your users may end up not receiving
- * new versions of files because the revision hasn't changed.
- *
- * Please use workbox-build or some other tool / approach to generate the file
- * manifest which accounts for changes to local files and update the revision
- * accordingly.
- */
+const swVersion = 1;
+
 const fileManifest = [
   {
     "url": "assets/blip1.wav",
@@ -32,7 +16,7 @@ const fileManifest = [
   },
   {
     "url": "assets/common-styles.css",
-    "revision": "1cf652782b40ab43c77ebbd7723462ac"
+    "revision": "1cf652782b40ab43c77ebbd7723462c"
   },
   {
     "url": "assets/created2.wav",
@@ -128,7 +112,7 @@ const fileManifest = [
   },
   {
     "url": "strow.bundle.js",
-    "revision": "a5cbf7990a75e68926d33a3d16c3aa09"
+    "revision": "5"
   },
   {
     "url": "/habit-ui/habit-details.css",
@@ -144,7 +128,7 @@ const fileManifest = [
   },
   {
     "url": "/",
-    "revision": "7e587e52c6c2ef1989ab75e07444de3f"
+    "revision": "7e587e52c6c2ef1989ab75e07444de33"
   },
   {
     "url": "https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/fonts/fontawesome-webfont.woff2?v=4.7.0",

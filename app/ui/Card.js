@@ -98,7 +98,7 @@ class Card extends Simply.Component{
 
         setTimeout(_ => {
             preventAutoDismiss = false;
-        }, 1000)
+        }, 2000)
         
         this._dismissHandler = function(event){
 

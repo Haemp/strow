@@ -1,5 +1,5 @@
 class CommonStyles extends HTMLElement{
-    
+
     constructor(){
         super();
         this.$shadyDom = true;
