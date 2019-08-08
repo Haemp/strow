@@ -2,3 +2,4 @@ node_modules
 .idea
 mobile
 build
+firebaseKeys.json
